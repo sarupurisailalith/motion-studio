@@ -2,16 +2,25 @@
 """
 check.py — automated QA on a rendered video (the "smoke test" before a human looks).
 
-Gates (each pass/warn/fail):
-  blank      frames that are a single flat colour (broken scene, missing asset)
-  pops       single-frame jumps: frame-diff spike > 3x its neighbours (glitchy cut, mis-seek)
-  frozen     stretches with no visible change longer than --max-hold seconds (dead time)
-  loop_seam  last frame -> first frame jump vs. typical motion (only with --loop)
-  audio      integrated loudness (LUFS) if the file has audio
+Frames are analysed in grey at 160 px wide; "diff" = mean absolute change per pixel (0-255)
+between consecutive frames.
 
-Also writes a contact sheet (4x4) next to the video for visual review.
+Gates (pass / WARN / FAIL; any FAIL -> exit code 1):
+  blank      FAIL  frames that are one flat colour (pixel std < 1): broken scene, missing asset
+  pops       WARN  single-frame jumps: a diff > 3x both neighbours and > 6 (glitchy cut, mis-seek)
+  frozen     WARN  longest run of diffs < 0.15 longer than --max-hold s (dead time). Coarse at
+                   160 px: small or slow movers can read as "still"; judge the frames before acting.
+  loop_seam  WARN  last -> first frame change > 3x the median diff (only with --loop)
+  audio      pass/WARN  integrated loudness within -14 ±2.5 LUFS. Quieter audio still passes as
+                   "sparse" when its true peak is within 3 dB of full scale (SFX-only pieces that
+                   mix.py peak-normalised: short sounds can't get louder without distortion)
+  sync       FAIL  with --sync sfx_events.json: each transient SFX within ±20 ms of its hit (sync.py)
 
-Usage: python3 check.py renders/comp.mp4 [--loop] [--max-hold 1.0]
+Outputs: the JSON report on stdout (and in --json FILE), plus a 4x4 QA contact sheet
+<video stem>_qa_sheet.png next to the video (never the _sheet.png that render.py --deliver writes).
+
+Usage: python3 check.py renders/comp.mp4 [--loop] [--max-hold 1.0] [--json renders/comp_qa.json]
+       python3 check.py renders/comp.mp4 --sync audio/sfx_events.json
 """
 import argparse, json, re, subprocess, sys
 from pathlib import Path
@@ -42,11 +51,13 @@ def frames_gray(path, w=160):
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("video", type=Path)
-    ap.add_argument("--loop", action="store_true")
-    ap.add_argument("--max-hold", type=float, default=1.0, help="longest acceptable still stretch (s)")
-    ap.add_argument("--no-sheet", action="store_true")
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("video", type=Path, help="the rendered MP4")
+    ap.add_argument("--loop", action="store_true", help="the piece loops: add the loop_seam gate")
+    ap.add_argument("--max-hold", type=float, default=1.0, help="longest acceptable still stretch (s, default 1.0)")
+    ap.add_argument("--no-sheet", action="store_true", help="skip the QA contact sheet")
+    ap.add_argument("--json", type=Path, metavar="FILE", help="also write the JSON report to FILE")
+    ap.add_argument("--sync", type=Path, metavar="SFX_EVENTS", help="sfx_events.json: add the sync gate")
     a = ap.parse_args()
 
     fr, fps, info = frames_gray(a.video)
@@ -92,17 +103,36 @@ def main():
 
     # audio loudness
     if any(s["codec_type"] == "audio" for s in info["streams"]):
-        err = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(a.video), "-af", "ebur128", "-f", "null", "-"],
+        err = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(a.video), "-af", "ebur128=peak=true", "-f", "null", "-"],
                              capture_output=True, text=True).stderr
         m = re.findall(r"I:\s+(-?[\d.]+) LUFS", err)
         if m:
             lufs = float(m[-1])
+            tpm = re.findall(r"Peak:\s+(-?[\d.]+) dBFS", err[err.rfind("Summary:"):])
+            tp = float(tpm[-1]) if tpm else None
             res["lufs"] = lufs
-            res["gates"]["audio"] = "pass" if -16.5 <= lufs <= -12.5 else f"WARN integrated {lufs} LUFS (target -14)"
+            res["true_peak"] = tp
+            if -16.5 <= lufs <= -12.5:
+                res["gates"]["audio"] = "pass"
+            elif lufs < -16.5 and tp is not None and tp >= -4.0:
+                res["gates"]["audio"] = f"pass (sparse: integrated {lufs} LUFS, true peak {tp} dBTP)"
+            else:
+                res["gates"]["audio"] = f"WARN integrated {lufs} LUFS (target -14), true peak {tp} dBTP"
+
+    # picture/sound sync (same measurement as sync.py)
+    if a.sync:
+        if not any(s["codec_type"] == "audio" for s in info["streams"]):
+            res["gates"]["sync"] = "FAIL no audio stream to check against the hits"
+        else:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            import _audio, sync
+            rep = sync.run(_audio.load(a.video, _audio.SR), _audio.SR, a.sync)
+            res["sync"] = rep["hits"]
+            res["gates"]["sync"] = rep["status"]
 
     # contact sheet
     if not a.no_sheet:
-        sheet = a.video.with_name(a.video.stem + "_sheet.png")
+        sheet = a.video.with_name(a.video.stem + "_qa_sheet.png")   # never render.py's _sheet.png
         step = max(1, n // 16)
         subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(a.video), "-vf",
                         f"select='not(mod(n\\,{step}))',scale=400:-1,tile=4x4:padding=6:color=black",
@@ -110,6 +140,8 @@ def main():
         res["contact_sheet"] = str(sheet)
 
     print(json.dumps(res, indent=2))
+    if a.json:
+        a.json.write_text(json.dumps(res, indent=2))
     sys.exit(1 if any(str(v).startswith("FAIL") for v in res["gates"].values()) else 0)
 
 

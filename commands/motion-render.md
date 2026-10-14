@@ -1,18 +1,31 @@
 ---
-description: Render an existing HTML animation to MP4 deterministically and run the QA gates
-argument-hint: <path/to/composition.html> [--subframes 4] [--audio file] [--gl]
+description: Render an existing HTML animation to MP4 (one or more formats) deterministically and run the QA gates
+argument-hint: <path/to/composition.html> [--format 16x9,9x16] [--deliver] [--subframes 4] [--audio file] [--gl]
 ---
 
 Render and QA: $ARGUMENTS
 
-Scripts: `${CLAUDE_PLUGIN_ROOT}/skills/motion-video/scripts/` (render.py, check.py, vendor.py).
+`S=${CLAUDE_PLUGIN_ROOT}/skills/motion-video/scripts` (render.py, check.py, vendor.py, mix.py).
+`R="python3 $S/render.py"`. Outputs go to `renders/` next to the HTML.
 
-1. Check the file implements the contract (`window.MOTION`, `window.ready`, `window.seek(t)`).
-   If it's a free-running animation (rAF loop, CSS animations, GSAP playing, THREE.Clock),
-   refactor it so every value derives from `t` — see the `motion-video` skill's determinism
-   rules — keeping the look identical. If it loads libraries or fonts from a CDN, vendor
-   them locally.
-2. `render.py <file> --check-only` → fix any FAIL. Then `--sheet` and look at the sheet.
-3. Full render with the user's flags (default `--subframes 3`; add `--gl` for WebGL).
-4. `check.py renders/<name>.mp4` (`--loop` if MOTION.loop). Fix FAILs, explain or fix WARNs.
-5. Report: output path, duration/resolution/fps/size, gate results, contact sheet path.
+1. **Contract.** The file must expose `window.MOTION`, `window.ready`, `window.seek(t)`. If it runs
+   on its own clock (rAF loop, CSS animations, a playing GSAP timeline, THREE.Clock), refactor it so
+   every value derives from `t` (the `motion-video` skill's determinism rules), keeping the look
+   identical. Vendor CDN libraries (`vendor.py <folder> three|gsap`) and use local fonts.
+   `--format` needs the page to call `K.init(MOTION)` (copy `templates/kit.js` next to it);
+   without the kit, render natively.
+2. **Gates.** `$R <file> [--format F] --check-only` → determinism, loop seam, page errors, and with
+   the kit `safe_area` (`[data-safe]` inside `K.safe.ui`) and `text_duration` (`[data-text]`
+   readable ≥ 8 frames). Fix every FAIL; explain or fix each WARN.
+3. **Look.** `$R <file> [--format F] --sheet` (one sheet per format; `--phone` when reviewing readability), and as needed `--stills 1,2.5`,
+   `--strip A:B:N` (across a transition), `--poster [T]` (put it after the HTML path),
+   `--contact beats` (needs beats.js). Open the PNGs and judge them.
+4. **Render** with the user's flags (default `--subframes 3`; `--gl` for WebGL; `--workers N`;
+   `--scale 2` for crisper type). `--format 16x9,9x16,1x1,4x5` renders each format
+   (`renders/<stem>_<fmt>.mp4`); `--deliver` adds a poster and sheet per format plus
+   `renders/deliver.json`. `--audio track.wav` muxes and normalises to −14 LUFS; for SFX or a
+   mix across formats use `/motion-audio` (`mix.py --mux` keeps deliver.json current).
+5. **QA.** `python3 $S/check.py renders/<stem>[_<fmt>].mp4` per file (`--loop` if MOTION.loop;
+   `--sync audio/sfx_events.json` with SFX). Fix FAILs; explain or fix WARNs.
+6. **Report:** output paths (or deliver.json), duration/resolution/fps/size per format, gate
+   results, contact sheet paths.

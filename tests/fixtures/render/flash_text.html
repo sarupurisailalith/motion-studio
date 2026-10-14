@@ -1,0 +1,12 @@
+<!doctype html><html><head><meta charset="utf-8"><title>render fixture: flash text</title>
+<!-- W1-C test fixture: #flash [data-text] is fully visible for exactly 5 frames (10..14 at 30 fps). -->
+<style>html,body{margin:0;background:#000}#s{position:absolute;left:0;top:0;width:320px;height:320px;overflow:hidden;background:#f2efe9}
+#flash{position:absolute;left:60px;top:140px;font:bold 30px sans-serif;color:#111}</style></head>
+<body><div id="s"><div id="wrap"><div id="flash" data-text>SALE</div></div></div><script>
+window.MOTION = { width: 320, height: 320, fps: 30, duration: 1, loop: false };
+window.ready = Promise.resolve();
+window.seek = t => {
+  const f = Math.round(t * 30);
+  document.getElementById('wrap').style.opacity = (f >= 10 && f < 15) ? 1 : 0;
+};
+</script></body></html>

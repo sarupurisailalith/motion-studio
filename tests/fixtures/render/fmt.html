@@ -1,0 +1,39 @@
+<!doctype html><html><head><meta charset="utf-8"><title>render fixture: formats</title>
+<!-- W1-C test fixture. Implements the C1/C2 contract by hand (no kit.js):
+     reads ?format&w&h, sets MOTION.width/height, exposes an inline window.K with FORMAT, safe
+     and resolveHits. One [data-safe] element stays inside K.safe.ui; one [data-text] element is
+     visible for 1 s (0.5 <= t < 1.5). The time is printed so every t gives a distinct picture. -->
+<style>html,body{margin:0;background:#000}#s{position:absolute;left:0;top:0;overflow:hidden;background:#f2efe9;font:bold 28px sans-serif}
+#bar{position:absolute;left:0;height:24px;background:#ff4d1f}
+#label{position:absolute;color:#111;text-align:center}
+#cap{position:absolute;left:0;width:100%;text-align:center;color:#2040c0}</style></head>
+<body><div id="s"><div id="bar"></div><div id="label" data-safe></div><div id="cap" data-text>caption</div></div><script>
+window.MOTION = { width: 320, height: 320, fps: 30, duration: 2, loop: false };
+(function () {
+  const FORMATS = { '16x9': {W:1920,H:1080}, '9x16': {W:1080,H:1920}, '1x1': {W:1080,H:1080}, '4x5': {W:1080,H:1350} };
+  const q = new URLSearchParams(location.search);
+  const name = q.get('format') || 'native';
+  if (q.get('w') && q.get('h')) { MOTION.width = +q.get('w'); MOTION.height = +q.get('h'); }
+  const W = MOTION.width, H = MOTION.height;
+  const R = (x, y, w, h) => ({ x: Math.round(x*W), y: Math.round(y*H), w: Math.round(w*W), h: Math.round(h*H) });
+  const title = R(.05, .05, .90, .90);
+  const ui = name === '9x16' ? R(.06, .12, .80, .66) : name === '4x5' ? R(.05, .08, .90, .80) : title;
+  window.K = {
+    FORMATS, FORMAT: { name, W, H, isPortrait: H > W, aspect: W / H }, safe: { title, ui },
+    resolveHits() { return []; },
+  };
+})();
+window.ready = Promise.resolve();
+const W = MOTION.width, H = MOTION.height, $ = id => document.getElementById(id);
+const s = $('s'); s.style.width = W + 'px'; s.style.height = H + 'px';
+const label = $('label');
+label.style.left = (0.35 * W) + 'px'; label.style.top = (0.45 * H) + 'px';
+label.style.width = (0.3 * W) + 'px'; label.style.height = (0.1 * H) + 'px';
+$('cap').style.top = (0.6 * H) + 'px';
+$('bar').style.top = (0.3 * H) + 'px';
+window.seek = t => {
+  label.textContent = K.FORMAT.name + ' ' + t.toFixed(3);
+  $('bar').style.width = (W * t / MOTION.duration) + 'px';
+  $('cap').style.opacity = (t >= 0.5 && t < 1.5) ? 1 : 0;
+};
+</script></body></html>

@@ -1,0 +1,17 @@
+<!doctype html><html><head><meta charset="utf-8"><title>render fixture: beats</title>
+<!-- W1-C test fixture: window.BEATS with 4 downbeats inside the 1.6 s duration (and one after it).
+     Honours ?w&h (C2) so it can be rendered with --format. -->
+<style>html,body{margin:0;background:#000}#s{position:absolute;left:0;top:0;overflow:hidden;background:#f2efe9;font:bold 40px sans-serif}
+#t{position:absolute;left:40px;top:130px;color:#111}</style></head>
+<body><div id="s"><div id="t"></div></div><script>
+window.BEATS = { version: 1, bpm: 600, period: 0.1, offset: 0, beats_per_bar: 4,
+                 beats: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5],
+                 downbeats: [0, 0.4, 0.8, 1.2, 2.0], duration: 1.6 };
+window.MOTION = { width: 320, height: 320, fps: 30, duration: 1.6, loop: false };
+const q = new URLSearchParams(location.search);
+if (q.get('w') && q.get('h')) { MOTION.width = +q.get('w'); MOTION.height = +q.get('h'); }
+const s = document.getElementById('s');
+s.style.width = MOTION.width + 'px'; s.style.height = MOTION.height + 'px';
+window.ready = Promise.resolve();
+window.seek = t => { document.getElementById('t').textContent = t.toFixed(3); };
+</script></body></html>

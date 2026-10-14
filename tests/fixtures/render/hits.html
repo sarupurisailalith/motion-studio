@@ -1,0 +1,24 @@
+<!doctype html><html><head><meta charset="utf-8"><title>render fixture: hits</title>
+<!-- W1-C test fixture: MOTION.hits with seconds and a beat string; window.BEATS and an inline
+     K.resolveHits that implements the C3 contract by hand. '2b' = 0.1 + 2 * 0.4 = 0.9 s. -->
+<style>html,body{margin:0;background:#000}#s{position:absolute;left:0;top:0;width:320px;height:320px;background:#f2efe9}</style></head>
+<body><div id="s"></div><script>
+window.BEATS = { version: 1, bpm: 150, period: 0.4, offset: 0.1, beats: [0.1, 0.5, 0.9, 1.3, 1.7],
+                 downbeats: [0.1], beats_per_bar: 4, duration: 2 };
+window.MOTION = { width: 320, height: 320, fps: 30, duration: 2, loop: false,
+  hits: [
+    [1.25, 'logo-land', 'thud'],
+    ['2b', 'drop', 'impact', { gain: -3 }],
+    [0.25, 'card-in', null],
+  ] };
+window.K = {
+  T(u) { return BEATS.offset + u * BEATS.period; },
+  resolveHits() {
+    return (MOTION.hits || []).map(([when, label, sfx, opts]) => ({
+      t: typeof when === 'string' ? K.T(parseFloat(when)) : when, label, sfx, opts: opts || {},
+    })).sort((a, b) => a.t - b.t);
+  },
+};
+window.ready = Promise.resolve();
+window.seek = t => {};
+</script></body></html>

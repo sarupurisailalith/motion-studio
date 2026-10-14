@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet href="https://evil.example/x.css" type="text/css"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     viewBox="0 0 200 100" onload="alert(1)">
+  <script type="text/javascript">alert('script');</script>
+  <style>@import url("https://evil.example/a.css"); .s { fill: url(https://evil.example/p.svg#g); } .k { fill: #0a8; }</style>
+  <defs><linearGradient id="g"><stop offset="0" stop-color="#f00"/></linearGradient></defs>
+  <rect id="box" class="k" x="10" y="10" width="80" height="80" fill="url(#g)" onclick="steal()"/>
+  <circle id="dot" cx="150" cy="50" r="40" fill="#123456" style="fill:url('http://evil.example/f')"/>
+  <use id="ref" xlink:href="#box" x="5"/>
+  <a href="javascript:alert(2)"><path id="p" d="M0 0 L10 10"/></a>
+  <a xlink:href="https://evil.example/"><text id="t" x="5" y="95">hi</text></a>
+  <image id="img" href="http://evil.example/tracker.png" width="10" height="10"/>
+  <image id="img2" xlink:href="https://evil.example/t2.png" width="10" height="10"/>
+  <set attributeName="onmouseover" to="alert(3)"/>
+  <animate attributeName="href" values="javascript:alert(4)"/>
+  <foreignObject width="10" height="10"><iframe xmlns="http://www.w3.org/1999/xhtml" src="https://evil.example/"/></foreignObject>
+</svg>

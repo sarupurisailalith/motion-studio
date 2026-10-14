@@ -5,6 +5,7 @@
 <title>Motion Composition — Three.js</title>
 <!--
   MOTION STUDIO — deterministic Three.js template.
+  Copy this file AND kit.js (the shared motion kit, window.K) into the project folder.
   Vendor three first:  python3 scripts/vendor.py <this folder> three
   Render with:         python3 scripts/render.py this.html --gl
 
@@ -12,24 +13,29 @@
   Never use THREE.Clock, AnimationMixer.update(delta) with real time, or physics steps
   that accumulate. If you need a mixer: mixer.setTime(t). If you need physics:
   simulate once up-front at fixed dt into an array, then index it by frame.
+  Formats: render.py --format 9x16 loads ?format=9x16&w=1080&h=1920; K.init applies it and the
+  renderer is sized from K.FORMAT. Preview: F cycles formats.
+  PREVIEW OVER HTTP: ES modules don't load from file://, so serve the folder first:
+    python3 -m http.server 8000   (in this folder)  ->  http://localhost:8000/<this file>.html
+  render.py handles this itself; only the browser preview needs the server.
 -->
 <style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block}</style>
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/three-addons/" } }
 </script>
+<!-- Cutting to music? Run beats.py, then load beats.js on the line ABOVE the kit script. -->
+<script src="kit.js"></script>
 </head>
 <body>
 <script type="module">
 import * as THREE from 'three';
 
-window.MOTION = { width: 1920, height: 1080, fps: 30, duration: 8, loop: true };
-const { width: W, height: H, duration: D } = window.MOTION;
+const K = window.K;   // the shared kit (kit.js, a classic script loaded before this module)
+window.MOTION = K.init({ width: 1920, height: 1080, fps: 30, duration: 8, loop: true,
+  hits: [[2.5, 'knot-formed', 'swell']] });   // sound sync points -> render.py --hits
+const { W, H } = K.FORMAT, { duration: D } = window.MOTION;
 const RENDER_MODE = new URLSearchParams(location.search).has('render');
-
-const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
-const seg = (t, a, b) => clamp((t - a) / (b - a));
-const inOut = p => p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
-const rand = (s, i) => { let h = Math.imul(s ^ 0x9E3779B1, i + 0x85EBCA77) >>> 0; h = Math.imul(h ^ h >>> 15, 0x2C1B3C6D); return ((h ^ h >>> 12) >>> 0) / 4294967296; };
+const { seg, rand } = K, inOut = K.ease.inOutCubic;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(1);
@@ -43,7 +49,8 @@ if (!RENDER_MODE) Object.assign(renderer.domElement.style, { width: '100vw', hei
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#0d0f12');
 scene.fog = new THREE.Fog('#0d0f12', 8, 22);
-const camera = new THREE.PerspectiveCamera(35, W / H, 0.1, 100);
+// vertical FOV per format: portrait widens it so the ring still reads side to side
+const camera = new THREE.PerspectiveCamera(K.pick({ '9x16': 52, '4x5': 40, '1x1': 42, default: 35 }), W / H, 0.1, 100);
 
 // product-shot lighting: soft key from one side, rim behind, low fill
 const key = new THREE.DirectionalLight('#fff4e6', 2.2); key.position.set(-4, 6, 4); key.castShadow = true;
@@ -87,10 +94,15 @@ function render(t) {
   renderer.render(scene, camera);
 }
 
-window.ready = Promise.resolve();
+window.ready = (async () => { if (document.fonts && document.fonts.ready) await document.fonts.ready; })();  // + textures, fonts.css
 window.seek = async t => render(t);
 
-if (!RENDER_MODE) { const t0 = performance.now(); const tick = () => { render(((performance.now() - t0) / 1000) % D); requestAnimationFrame(tick); }; tick(); }
+if (!RENDER_MODE) {
+  const t0 = performance.now(); const tick = () => { render(((performance.now() - t0) / 1000) % D); requestAnimationFrame(tick); }; tick();
+  addEventListener('keydown', e => {   // F: reload in the next format (native -> 16x9 -> 9x16 -> 1x1 -> 4x5)
+    if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === 'f' || e.key === 'F')) location.search = K.formatSearch(K.nextFormat());
+  });
+}
 </script>
 </body>
 </html>

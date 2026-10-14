@@ -1,0 +1,13 @@
+<!doctype html><html><head><meta charset="utf-8"><title>broken: blank</title>
+<!-- DELIBERATELY BROKEN (golden test): the frame is one flat colour for 0.4 s <= t < 0.6 s. -->
+<style>html,body{margin:0;background:#000}#s{position:absolute;width:320px;height:320px;background:#f2efe9;overflow:hidden}
+#b{position:absolute;top:120px;width:80px;height:80px;background:#ff4d1f}</style></head>
+<body><div id="s"><div id="b"></div></div><script>
+window.MOTION = { width: 320, height: 320, fps: 30, duration: 1, loop: false };
+window.ready = Promise.resolve();
+window.seek = t => {
+  const b = document.getElementById('b');
+  b.style.left = (20 + 200 * t) + 'px';
+  b.style.display = (t >= 0.4 && t < 0.6) ? 'none' : 'block';
+};
+</script></body></html>

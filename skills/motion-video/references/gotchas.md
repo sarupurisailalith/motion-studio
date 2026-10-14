@@ -23,6 +23,10 @@ Engineering gotchas:
 - **Unbounded cursor speed:** keep it under about 65 px/frame, and aim at where the target will be when the cursor lands.
 - **Fake ink:** "Do not cross-fade orange into ink". Move an accent element between states instead.
 - **Over-strong feedback:** keep impact reactions weak and short, touching only some particles for a few frames, or the subject becomes unreadable.
+- **Gates read opacity, not masks:** `render.py --check-only`'s `safe_area` checks any `[data-safe]` element with opacity > 0, and `text_duration` counts frames at opacity ≥ 0.9. Text flying in from off-stage or rising through a mask must sit at opacity 0 until it is in place (and after it leaves), or the gates report false overflows and fake reading time. Put `data-text` on the glyphs' row, not on an always-opaque mask.
+- **Fractional mask edges:** an `overflow:hidden` mask at a fractional pixel position under a scaled camera can keep a 1 px row of stale glyph pixels after some seek orders. Round mask positions to whole pixels.
+- **Three.js preview from `file://`:** ES modules are blocked there, so the page stays black. Serve the folder (`python3 -m http.server`) to preview; render.py already serves it over http.
+- **Sub-pixel CSS `scale()` on small elements:** rounded, bordered or anti-aliased boxes scaled by a non-integer factor can rasterise differently on a second seek, which fails the determinism gate. Animate `width`/`height` (or draw to canvas) and keep positions on whole pixels.
 - **Readability:** keep things readable on screen for at least 8 clean frames. A glitch lasts only 1–2 frames and only on a real cut.
 - **Honesty:** never invent features, numbers, fake customers, reviews or results. Label generated imagery as a concept. Check music and SFX licences. Never write API keys into files.
 - **Slop:** "a video with no bugs is not the same as a good video"; "frame one is a finished picture, never a word halfway through flying in"; and "if the hero object isn't the most memorable thing, start over."

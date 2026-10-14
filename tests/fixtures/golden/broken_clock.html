@@ -1,0 +1,9 @@
+<!doctype html><html><head><meta charset="utf-8"><title>broken: clock</title>
+<!-- DELIBERATELY BROKEN (golden test): position comes from the wall clock, not t. -->
+<style>html,body{margin:0;background:#000}#s{position:absolute;width:320px;height:320px;background:#f2efe9;overflow:hidden}
+#b{position:absolute;top:120px;width:80px;height:80px;background:#ff4d1f}</style></head>
+<body><div id="s"><div id="b"></div></div><script>
+window.MOTION = { width: 320, height: 320, fps: 30, duration: 2, loop: false };
+window.ready = Promise.resolve();
+window.seek = t => { document.getElementById('b').style.left = (performance.now() % 240) + 'px'; };
+</script></body></html>

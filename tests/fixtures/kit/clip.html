@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>kit clip fixture</title>
+<style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block}</style>
+</head>
+<body>
+<canvas id="c" width="200" height="200"></canvas>
+<!-- assets.js (window.ASSETS) is written by the test, like ingest.py would -->
+<script src="assets.js"></script>
+<script src="kit.js"></script>
+<script>
+window.MOTION = K.init({ width: 200, height: 200, fps: 30, duration: 2, loop: false });
+const clip = window.ASSETS.assets.find(a => a.id === 'c');
+const ctx = document.getElementById('c').getContext('2d');
+window.ready = K.loadClip(clip);
+window.seek = async t => { await window.ready; K.drawClip(ctx, clip, t, 0, 0, 200, 200); };
+</script>
+</body>
+</html>

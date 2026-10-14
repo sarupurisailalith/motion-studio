@@ -1,0 +1,9 @@
+<!doctype html><html><head><meta charset="utf-8"><title>render fixture: beat hits, no kit</title>
+<!-- W1-C test fixture: a beat-string hit but no window.K, so render.py --hits must refuse. -->
+<style>html,body{margin:0;background:#000}#s{position:absolute;left:0;top:0;width:320px;height:320px;background:#f2efe9}</style></head>
+<body><div id="s"></div><script>
+window.MOTION = { width: 320, height: 320, fps: 30, duration: 2, loop: false,
+  hits: [ [0.5, 'a', 'tick'], ['4b', 'drop', 'impact'] ] };
+window.ready = Promise.resolve();
+window.seek = t => {};
+</script></body></html>

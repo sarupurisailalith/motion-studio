@@ -1,0 +1,12 @@
+<!doctype html><html><head><meta charset="utf-8"><title>render fixture: unsafe</title>
+<!-- W1-C test fixture: #badge [data-safe] overflows the right edge of K.safe.ui by 40 px
+     for 0.5 <= t < 1.0 (ui = x 16..304). Inline window.K, no kit.js. -->
+<style>html,body{margin:0;background:#000}#s{position:absolute;left:0;top:0;width:320px;height:320px;overflow:hidden;background:#f2efe9}
+#badge{position:absolute;top:140px;width:100px;height:40px;background:#ff4d1f}</style></head>
+<body><div id="s"><div id="badge" data-safe></div></div><script>
+window.MOTION = { width: 320, height: 320, fps: 30, duration: 1.5, loop: false };
+window.K = { FORMAT: { name: 'native', W: 320, H: 320, isPortrait: false, aspect: 1 },
+             safe: { title: { x: 16, y: 16, w: 288, h: 288 }, ui: { x: 16, y: 16, w: 288, h: 288 } } };
+window.ready = Promise.resolve();
+window.seek = t => { document.getElementById('badge').style.left = (t >= 0.5 && t < 1.0 ? 244 : 100) + 'px'; };
+</script></body></html>

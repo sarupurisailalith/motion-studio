@@ -1,0 +1,9 @@
+<!doctype html><html><head><meta charset="utf-8"><title>broken: seam</title>
+<!-- DELIBERATELY BROKEN (golden test): claims loop:true but a counter makes t=D differ from t=0. -->
+<style>html,body{margin:0;background:#000}#s{position:absolute;width:320px;height:320px;background:#f2efe9;overflow:hidden}
+#n{position:absolute;left:40px;top:100px;font:800 120px/1 Arial,sans-serif;color:#111}</style></head>
+<body><div id="s"><div id="n"></div></div><script>
+window.MOTION = { width: 320, height: 320, fps: 30, duration: 2, loop: true };
+window.ready = Promise.resolve();
+window.seek = t => { document.getElementById('n').textContent = String(Math.floor(t * 10)).padStart(2, '0'); };
+</script></body></html>

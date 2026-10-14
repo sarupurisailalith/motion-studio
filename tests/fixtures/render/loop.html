@@ -1,0 +1,9 @@
+<!doctype html><html><head><meta charset="utf-8"><title>render fixture: loop</title>
+<!-- W1-C test fixture: no MOTION.poster and loop: true, so the default poster time is 0. The time is printed so each t looks different. -->
+<style>html,body{margin:0;background:#000}#s{position:absolute;left:0;top:0;width:320px;height:320px;overflow:hidden;background:#f2efe9;font:bold 40px sans-serif}
+#t{position:absolute;left:40px;top:130px;color:#111}</style></head>
+<body><div id="s"><div id="t"></div></div><script>
+window.MOTION = { width: 320, height: 320, fps: 30, duration: 2, loop: true };
+window.ready = Promise.resolve();
+window.seek = t => { document.getElementById('t').textContent = t.toFixed(3); };
+</script></body></html>
