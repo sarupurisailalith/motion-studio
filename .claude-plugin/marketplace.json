@@ -1,0 +1,14 @@
+{
+  "name": "motion-studio",
+  "owner": {
+    "name": "Sailalith Sarupuri",
+    "url": "https://github.com/sarupurisailalith"
+  },
+  "plugins": [
+    {
+      "name": "motion-studio",
+      "source": "./",
+      "description": "Make motion-graphics videos with code — deterministic render pipeline, QA gates and critic agent."
+    }
+  ]
+}

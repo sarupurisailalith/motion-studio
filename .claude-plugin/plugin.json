@@ -1,0 +1,11 @@
+{
+  "name": "motion-studio",
+  "version": "0.1.0",
+  "description": "Make motion-graphics videos with code: brief → storyboard → deterministic HTML/SVG/Canvas/Three.js composition → frame-exact headless render → automated QA → MP4.",
+  "author": {
+    "name": "Sailalith Sarupuri",
+    "url": "https://github.com/sarupurisailalith"
+  },
+  "license": "MIT",
+  "keywords": ["motion-graphics", "video", "animation", "threejs", "gsap", "ffmpeg", "playwright", "remotion-alternative"]
+}
