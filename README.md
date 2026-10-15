@@ -34,21 +34,15 @@ same frame. That is what makes renders exact, repeatable and fixable with small 
 ## The film
 
 <!--
-  The poster links to the MP4 in this repo (GitHub plays it in the file view; repo MP4s can't
-  play inline in a README). For an inline player: open README.md in GitHub's web editor, drag the
-  MP4 here, and replace this <p> with the https://github.com/user-attachments/assets/<id> URL it
-  inserts, on its own line. To host on YouTube instead, point the link below at the video URL.
+  Inline player: the MP4 is uploaded as a GitHub attachment (README web editor, drag and drop).
+  Fallback poster that links to the MP4 in this repo: docs/assets/film-poster.png ->
+  docs/assets/motion-studio-launch_16x9_tech.mp4.
 -->
+
 https://github.com/user-attachments/assets/9f9734a2-e2af-497f-a4cc-b6172d769402
-<!--<p align="center">
-  <a href="docs/assets/motion-studio-launch_16x9_tech.mp4">
-    <img src="docs/assets/film-poster.png" alt="Motion Studio launch film (36 s, 16:9). Click to watch." width="100%">
-  </a>
-  <br>
-  <sub>The launch film, made with Motion Studio: 36 s, 16:9, with sound. <a href="docs/assets/motion-studio-launch_16x9_tech.mp4">Watch it</a>.</sub>
-</p>
--->
-  <sub>The launch film, made with Motion Studio: 36 s, 16:9, with sound.</sub>
+
+<p align="center"><sub>The launch film, made with Motion Studio: 36 s, 16:9, with sound.</sub></p>
+
 ## How it works
 
 <picture>
