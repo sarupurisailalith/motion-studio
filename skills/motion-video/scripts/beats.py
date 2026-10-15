@@ -73,8 +73,8 @@ def accent_envelope(mono, sr, hop=HOP_HI):
     return nov / (nov.max() + 1e-12), sr / hop
 
 
-def _strength(env, fr, times, r=6):
-    return np.array([env[max(0, int(round(t * fr)) - r):int(round(t * fr)) + r + 1].max(initial=0) for t in times])
+def _strength(onset, fr, times, r=6):
+    return np.array([onset[max(0, int(round(t * fr)) - r):int(round(t * fr)) + r + 1].max(initial=0) for t in times])
 
 
 def _maxfilt(x, r):
@@ -94,11 +94,11 @@ def coarse_bpm(mono, sr, lo=60.0, hi=200.0):
             return t
     except Exception:
         pass
-    env, fr = flux_envelope(mono, sr)
+    onset, fr = flux_envelope(mono, sr)
     g = np.exp(-0.5 * (np.arange(-4, 5) / 1.5) ** 2)
-    env = np.convolve(env, g / g.sum(), "same")  # widen peaks so fractional lags don't split
-    env = env - env.mean()
-    ac = np.correlate(env, env, "full")[len(env) - 1:]
+    onset = np.convolve(onset, g / g.sum(), "same")  # widen peaks so fractional lags don't split
+    onset = onset - onset.mean()
+    ac = np.correlate(onset, onset, "full")[len(onset) - 1:]
     acf = lambda lag: np.interp(lag, np.arange(len(ac)), ac)
     bpm = np.arange(lo, hi + 0.05, 0.1)
     lag = 60 * fr / bpm
@@ -107,14 +107,14 @@ def coarse_bpm(mono, sr, lo=60.0, hi=200.0):
     return float(bpm[int(np.argmax(score))])
 
 
-def _grid_scores(env, fr, period, nbeats_max, phases):
+def _grid_scores(onset, fr, period, nbeats_max, phases):
     k = np.arange(nbeats_max)
     idx = phases[:, None] + np.round(k * period * fr).astype(int)[None, :]
-    valid = idx < len(env)
-    return np.where(valid, env[np.minimum(idx, len(env) - 1)], 0).sum(axis=1) / np.maximum(valid.sum(1), 1)
+    valid = idx < len(onset)
+    return np.where(valid, onset[np.minimum(idx, len(onset) - 1)], 0).sum(axis=1) / np.maximum(valid.sum(1), 1)
 
 
-def fit_grid(env, fr, period0, fixed=False):
+def fit_grid(onset, fr, period0, fixed=False):
     """Best (period, phase) for a steady grid on the fine envelope."""
     def search(periods, e):
         best = (-1.0, period0, 0)
@@ -129,22 +129,22 @@ def fit_grid(env, fr, period0, fixed=False):
         periods = [period0]
     else:
         periods = np.arange(period0 * 0.97, period0 * 1.03, 0.0002)
-        _, p1, _ = search(periods, _maxfilt(env, 8))
-        nb = max(1, len(env) / (p1 * fr))
+        _, p1, _ = search(periods, _maxfilt(onset, 8))
+        nb = max(1, len(onset) / (p1 * fr))
         periods = np.arange(p1 - 0.0003, p1 + 0.0003, max(1e-6, 0.5 / fr / nb))
-    _, p, _ = search(periods, _maxfilt(env, 2))
-    _, p, ph = search([p], env)  # exact phase on the raw envelope
+    _, p, _ = search(periods, _maxfilt(onset, 2))
+    _, p, ph = search([p], onset)  # exact phase on the raw envelope
     return p, ph / fr
 
 
 def metric_level(mono, sr, period, phase, lo=60.0, hi=200.0, ratio=0.4):
     """Octave check: 2 if the off-beats are strong enough to be beats themselves,
     0.5 if every other beat is weak (the real beat is half as fast), else 1."""
-    env, fr = accent_envelope(mono, sr)
+    onset, fr = accent_envelope(mono, sr)
     length = len(mono) / sr
 
     def strength(start, step):
-        return _strength(env, fr, np.arange(start, length - 0.05, step))
+        return _strength(onset, fr, np.arange(start, length - 0.05, step))
     on = strength(phase, period)
     off = strength(phase + period / 2, period)
     if 60 / period * 2 <= hi and on.mean() > 0 and off.mean() / on.mean() >= ratio:
@@ -157,13 +157,13 @@ def metric_level(mono, sr, period, phase, lo=60.0, hi=200.0, ratio=0.4):
 
 def analyze(mono, sr, bpm=None):
     """-> {bpm, period, beats, downbeats, energy} in source-track time (seconds)."""
-    env, fr = fine_envelope(mono, sr)
+    onset, fr = fine_envelope(mono, sr)
     p0 = 60.0 / (bpm or coarse_bpm(mono, sr))
-    period, phase = fit_grid(env, fr, p0, fixed=bool(bpm))
+    period, phase = fit_grid(onset, fr, p0, fixed=bool(bpm))
     if not bpm:
         level = metric_level(mono, sr, period, phase)
         if level != 1:
-            period, phase = fit_grid(env, fr, period / level)
+            period, phase = fit_grid(onset, fr, period / level)
     length = len(mono) / sr
     beats = phase + period * np.arange(int((length - phase) / period) + 1)
     beats = beats[beats < length]

@@ -13,6 +13,7 @@
   "documentationUrl": "https://github.com/sarupurisailalith/motion-studio#readme",
   "supportUrl": "https://github.com/sarupurisailalith/motion-studio/issues",
   "privacyPolicyUrl": "https://github.com/sarupurisailalith/motion-studio/blob/main/PRIVACY.md",
+  "icon": "./.claude-plugin/icon.png",
   "license": "Apache-2.0",
   "keywords": [
     "motion-graphics",
