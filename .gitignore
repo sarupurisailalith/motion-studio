@@ -41,6 +41,7 @@ renders/
 vendor/
 __pycache__/
 *.mp4
+!docs/assets/*.mp4
 
 # Local notes
 BACKLOG.md

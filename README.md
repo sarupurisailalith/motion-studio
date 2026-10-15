@@ -34,19 +34,18 @@ same frame. That is what makes renders exact, repeatable and fixable with small 
 ## The film
 
 <!--
-  FILM PLACEHOLDER (16:9)
-  When the film is ready:
-    1. On github.com, open README.md in the web editor and drag the MP4 onto this spot.
-       GitHub uploads it and inserts a https://github.com/user-attachments/assets/<id> URL.
-    2. Leave that URL on its own line, with a blank line above and below. It renders as an inline player.
-    3. Delete the <p> with the poster and the caption below.
-  (Repo-committed MP4s do not play inline, and *.mp4 is gitignored.)
+  The poster links to the MP4 in this repo (GitHub plays it in the file view; repo MP4s can't
+  play inline in a README). For an inline player: open README.md in GitHub's web editor, drag the
+  MP4 here, and replace this <p> with the https://github.com/user-attachments/assets/<id> URL it
+  inserts, on its own line. To host on YouTube instead, point the link below at the video URL.
 -->
 
 <p align="center">
-  <img src="docs/assets/film-poster.png" alt="Motion Studio film poster, 16:9" width="100%">
+  <a href="docs/assets/motion-studio-launch_16x9_tech.mp4">
+    <img src="docs/assets/film-poster.png" alt="Motion Studio launch film (36 s, 16:9). Click to watch." width="100%">
+  </a>
   <br>
-  <sub>The 16:9 film, made with Motion Studio, lands here soon.</sub>
+  <sub>The launch film, made with Motion Studio: 36 s, 16:9, with sound. <a href="docs/assets/motion-studio-launch_16x9_tech.mp4">Watch it</a>.</sub>
 </p>
 
 ## How it works
