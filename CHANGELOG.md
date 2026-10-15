@@ -3,6 +3,25 @@
 All notable changes to Motion Studio. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/). Backlog ids (E…) refer to the project backlog.
 
+## [0.2.2] — 2026-10-15
+
+Directory-submission readiness. No change to commands, compositions or render output.
+
+### Added
+- `PRIVACY.md` (no data collected, what is read/written, every download and where it comes from)
+  and `SECURITY.md` (private vulnerability reporting).
+- README: "No generative media models", "What runs on your machine", "Troubleshooting" and
+  "Privacy and security" sections.
+- `plugin.json`: `displayName`, `homepage`, `repository`, `documentationUrl`, `supportUrl`,
+  `privacyPolicyUrl`; `marketplace.json`: `description`.
+
+### Changed
+- `vendor.py` installs exact pinned versions (`three@0.186.1`, `gsap@3.15.0`,
+  `lottie-web@5.13.0`) instead of whatever is latest.
+
+### Removed
+- The launch film MP4 from `docs/assets/`; the README plays it from a GitHub attachment.
+
 ## [0.2.1] — 2026-10-15
 
 ### Changed

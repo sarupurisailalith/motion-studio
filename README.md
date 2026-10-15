@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md"><img alt="version 0.2.1" src="https://img.shields.io/badge/version-0.2.1-FF4D1F?style=flat-square&labelColor=0E0F11"></a>
+  <a href="CHANGELOG.md"><img alt="version 0.2.2" src="https://img.shields.io/badge/version-0.2.2-FF4D1F?style=flat-square&labelColor=0E0F11"></a>
   <a href="LICENSE"><img alt="licence Apache-2.0" src="https://img.shields.io/badge/licence-Apache--2.0-6B6862?style=flat-square&labelColor=0E0F11"></a>
   <img alt="formats 16x9 9x16 1x1 4x5" src="https://img.shields.io/badge/formats-16x9%20·%209x16%20·%201x1%20·%204x5-6B6862?style=flat-square&labelColor=0E0F11">
   <img alt="audio −14 LUFS" src="https://img.shields.io/badge/audio-−14%20LUFS-6B6862?style=flat-square&labelColor=0E0F11">
@@ -31,12 +31,16 @@ frame-exact to MP4 in every format you ask for, with synced sound effects and an
 **Every frame is a function of time.** No clocks, no timers, no unseeded randomness. Same `t`,
 same frame. That is what makes renders exact, repeatable and fixable with small edits.
 
+**No generative media models.** Motion Studio never calls an image, video or audio generation
+model. The agent writes code (HTML, SVG, Canvas, Three.js), headless Chromium renders that code
+frame by frame, ffmpeg encodes it, and sound effects are synthesized from math in `sfx.py`.
+Everything runs on your machine. See [What runs on your machine](#what-runs-on-your-machine).
+
 ## The film
 
 <!--
-  Inline player: the MP4 is uploaded as a GitHub attachment (README web editor, drag and drop).
-  Fallback poster that links to the MP4 in this repo: docs/assets/film-poster.png ->
-  docs/assets/motion-studio-launch_16x9_tech.mp4.
+  Inline player: the MP4 is uploaded as a GitHub attachment (README web editor, drag and drop),
+  so the video file itself is not stored in the repository.
 -->
 
 https://github.com/user-attachments/assets/9f9734a2-e2af-497f-a4cc-b6172d769402
@@ -288,6 +292,42 @@ template uses ES modules, which browsers block from `file://`, so serve its fold
 cd motion/<slug> && python3 -m http.server 8000   # then open http://localhost:8000/<slug>.html
 ```
 
+## What runs on your machine
+
+Motion Studio has no server, no account and no telemetry. The plugin has no hooks and no MCP
+servers; it only runs the scripts below, when the agent or you invoke them.
+
+| What runs | What it does | Network |
+|---|---|---|
+| `render.py` | Serves the composition folder on `127.0.0.1` (random port, local only), drives headless Chromium through Playwright, pipes frames to ffmpeg | None needed. Compositions the plugin builds load libraries from a local `vendor/` folder; your own HTML that links to remote URLs is fetched like in any browser |
+| `check.py`, `sync.py`, `beats.py`, `sfx.py`, `mix.py` | Analyse and mix audio and video with ffmpeg/ffprobe and numpy | None |
+| `ingest.py` | Copies your asset files into `motion/<slug>/assets/`, sanitising SVGs and converting clips with ffmpeg | None |
+| `vendor.py` | Copies three.js, GSAP or lottie into `vendor/` so renders stay offline | Downloads exact pinned versions (`three@0.186.1`, `gsap@3.15.0`, `lottie-web@5.13.0`) from the npm registry |
+| Setup (you run it once) | `pip install …` and `python3 -m playwright install chromium` | PyPI and Playwright's Chromium download host |
+
+Files are read only when you name or attach them, and everything the plugin writes goes under
+`motion/<slug>/` in your project. It never reads Claude's memory or chat history. Details:
+[PRIVACY.md](PRIVACY.md).
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `playwright missing` or `numpy missing` | `pip install playwright numpy pillow`, then `python3 -m playwright install chromium` |
+| `ffmpeg` / `ffprobe` not found | Install ffmpeg and make sure it's on `PATH` (`ffmpeg -version`) |
+| Three.js piece renders black or fails to load modules | Run `vendor.py <project> three`, render with `--gl`, and preview over `http.server`, not `file://` |
+| `vendor.py` fails | Needs `npm` and network access to the npm registry; retry or copy the files into `vendor/` by hand |
+| A QA gate FAILs (determinism, blank frame, pop, loop seam) | The report names the frame and time; fix that beat and re-render. [`gotchas.md`](skills/motion-video/references/gotchas.md) lists the usual causes |
+| SFX land off the hit | Run `sync.py` and adjust `MOTION.hits`; the gate is ±20 ms |
+| `/motion` not found | Use the namespaced `/motion-studio:motion`, or check `claude plugin list` shows the plugin enabled |
+
+Still stuck? [Open an issue](https://github.com/sarupurisailalith/motion-studio/issues).
+
+## Privacy and security
+
+Motion Studio collects no data. See [PRIVACY.md](PRIVACY.md). To report a vulnerability, follow
+[SECURITY.md](SECURITY.md); please don't open a public issue for it.
+
 ## What's inside
 
 <details>
@@ -308,6 +348,7 @@ cd motion/<slug> && python3 -m http.server 8000   # then open http://localhost:8
 | `commands/` | `/motion`, `/motion-inspire`, `/motion-brief`, `/motion-assets`, `/motion-audio`, `/motion-render`. |
 | `agents/motion-critic.md` | Fresh-eyes reviewer: scores 7 dimensions with evidence, top 3 timestamped fixes, a critique ledger, and a ship / one-more-pass verdict. |
 | `docs/` | Performance notes and the README images in `docs/assets/`. |
+| `PRIVACY.md`, `SECURITY.md` | Privacy policy and how to report a vulnerability. |
 
 </details>
 

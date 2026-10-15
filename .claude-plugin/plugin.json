@@ -1,11 +1,27 @@
 {
   "name": "motion-studio",
-  "version": "0.2.1",
+  "displayName": "Motion Studio",
+  "version": "0.2.2",
   "description": "Make motion-graphics videos with code: brief → storyboard → deterministic HTML/SVG/Canvas/Three.js composition → frame-exact headless render in every format → synced SFX and a −14 LUFS mix → automated QA → MP4s, with scored critic rounds on request.",
   "author": {
     "name": "Sailalith Sarupuri",
-    "url": "https://github.com/sarupurisailalith"
+    "url": "https://github.com/sarupurisailalith",
+    "email": "sarupurisailalith@gmail.com"
   },
+  "homepage": "https://github.com/sarupurisailalith/motion-studio",
+  "repository": "https://github.com/sarupurisailalith/motion-studio",
+  "documentationUrl": "https://github.com/sarupurisailalith/motion-studio#readme",
+  "supportUrl": "https://github.com/sarupurisailalith/motion-studio/issues",
+  "privacyPolicyUrl": "https://github.com/sarupurisailalith/motion-studio/blob/main/PRIVACY.md",
   "license": "Apache-2.0",
-  "keywords": ["motion-graphics", "video", "animation", "threejs", "gsap", "ffmpeg", "playwright", "remotion-alternative"]
+  "keywords": [
+    "motion-graphics",
+    "video",
+    "animation",
+    "threejs",
+    "gsap",
+    "ffmpeg",
+    "playwright",
+    "remotion-alternative"
+  ]
 }

@@ -5,7 +5,7 @@ so renders never touch the network.
 
 Usage: python3 vendor.py <project_dir> three gsap [lottie]
 Creates <project_dir>/vendor/{three.module.js, three-addons/..., gsap.min.js, ...}
-Needs npm (uses a throwaway temp dir).
+Needs npm (uses a throwaway temp dir). Downloads the pinned versions in NPM from the npm registry.
 """
 import shutil, subprocess, sys, tempfile
 from pathlib import Path
@@ -19,7 +19,8 @@ PKGS = {
              ("dist/MotionPathPlugin.min.js", "MotionPathPlugin.min.js")],
     "lottie": [("build/player/lottie.min.js", "lottie.min.js")],
 }
-NPM = {"three": "three", "gsap": "gsap", "lottie": "lottie-web"}
+# Exact versions: the install never resolves a range, so every vendored build is reproducible.
+NPM = {"three": "three@0.186.1", "gsap": "gsap@3.15.0", "lottie": "lottie-web@5.13.0"}
 
 
 def main():
@@ -31,7 +32,7 @@ def main():
         subprocess.run(["npm", "init", "-y"], cwd=td, check=True, capture_output=True)
         subprocess.run(["npm", "install", "--no-audit", "--no-fund", *[NPM[w] for w in want]], cwd=td, check=True)
         for w in want:
-            root = Path(td) / "node_modules" / NPM[w]
+            root = Path(td) / "node_modules" / NPM[w].rsplit("@", 1)[0]
             for src, dst in PKGS[w]:
                 s, d = root / src, vend / dst
                 if not s.exists():
