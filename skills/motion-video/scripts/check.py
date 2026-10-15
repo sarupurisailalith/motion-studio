@@ -5,13 +5,13 @@ check.py — automated QA on a rendered video (the "smoke test" before a human l
 Frames are analysed in grey at 160 px wide; "diff" = mean absolute change per pixel (0-255)
 between consecutive frames.
 
-Gates (pass / WARN / FAIL; any FAIL -> exit code 1):
+Gates, each reported as pass, WARN or FAIL (any FAIL -> exit code 1):
   blank      FAIL  frames that are one flat colour (pixel std < 1): broken scene, missing asset
   pops       WARN  single-frame jumps: a diff > 3x both neighbours and > 6 (glitchy cut, mis-seek)
   frozen     WARN  longest run of diffs < 0.15 longer than --max-hold s (dead time). Coarse at
                    160 px: small or slow movers can read as "still"; judge the frames before acting.
   loop_seam  WARN  last -> first frame change > 3x the median diff (only with --loop)
-  audio      pass/WARN  integrated loudness within -14 ±2.5 LUFS. Quieter audio still passes as
+  audio      WARN  integrated loudness within -14 ±2.5 LUFS. Quieter audio still passes as
                    "sparse" when its true peak is within 3 dB of full scale (SFX-only pieces that
                    mix.py peak-normalised: short sounds can't get louder without distortion)
   sync       FAIL  with --sync sfx_events.json: each transient SFX within ±20 ms of its hit (sync.py)
