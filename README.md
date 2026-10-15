@@ -39,15 +39,16 @@ same frame. That is what makes renders exact, repeatable and fixable with small 
   MP4 here, and replace this <p> with the https://github.com/user-attachments/assets/<id> URL it
   inserts, on its own line. To host on YouTube instead, point the link below at the video URL.
 -->
-
-<p align="center">
+https://github.com/user-attachments/assets/9f9734a2-e2af-497f-a4cc-b6172d769402
+<!--<p align="center">
   <a href="docs/assets/motion-studio-launch_16x9_tech.mp4">
     <img src="docs/assets/film-poster.png" alt="Motion Studio launch film (36 s, 16:9). Click to watch." width="100%">
   </a>
   <br>
   <sub>The launch film, made with Motion Studio: 36 s, 16:9, with sound. <a href="docs/assets/motion-studio-launch_16x9_tech.mp4">Watch it</a>.</sub>
 </p>
-
+-->
+  <sub>The launch film, made with Motion Studio: 36 s, 16:9, with sound.</sub>
 ## How it works
 
 <picture>
