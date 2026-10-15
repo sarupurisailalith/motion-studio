@@ -3,6 +3,13 @@
 All notable changes to Motion Studio. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/). Backlog ids (E…) refer to the project backlog.
 
+## [0.2.1] — 2026-10-15
+
+### Changed
+- Licence: MIT → **Apache License 2.0**, with a `NOTICE` file that redistributions and derived
+  works must keep (Section 4(d)). Added `CITATION.cff` (GitHub's "Cite this repository").
+  Copies obtained before this release stay under MIT. Videos made with the plugin need no credit.
+
 ## [0.2.0] — 2026-10-14
 
 Sound, multi-format delivery, review discipline and your own assets. Every v0.1 command line

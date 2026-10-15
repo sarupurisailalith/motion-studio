@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: >-
+  If you build on Motion Studio or use it in your work, please cite it as below.
+  Videos made with Motion Studio don't need a citation, but "Made with Motion
+  Studio" is appreciated.
+type: software
+title: "Motion Studio"
+abstract: >-
+  An agent plugin that makes motion-graphics videos as code: brief and
+  storyboard, a deterministic HTML/SVG/Canvas/Three.js composition, frame-exact
+  headless rendering in every format, synced sound effects and an automated QA pass.
+authors:
+  - family-names: Sarupuri
+    given-names: Sailalith
+repository-code: "https://github.com/sarupurisailalith/motion-studio"
+url: "https://github.com/sarupurisailalith/motion-studio"
+license: Apache-2.0
+version: 0.2.1
+date-released: 2026-10-15
+keywords:
+  - motion graphics
+  - video
+  - animation
+  - claude code
+  - plugin
+  - ffmpeg
+  - playwright
