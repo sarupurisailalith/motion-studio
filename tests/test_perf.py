@@ -149,7 +149,7 @@ class Workers(unittest.TestCase):
         for w in (1, 3, 6):  # 6 asks for more workers than seconds: clamped to 3
             with self.subTest(workers=w):
                 mp4 = html.parent / f"w{w}.mp4"
-                r = render(html, "--skip-checks", "--workers", w, "-o", mp4)
+                r = render(html, "--skip-checks", "--no-cache", "--workers", w, "-o", mp4)  # 6 = 3: a cache hit
                 self.assertEqual(r.returncode, 0, r.stderr)
                 self.assertIn(f"with {min(w, 3)} worker(s)", r.stdout)
                 g = greys(mp4)
