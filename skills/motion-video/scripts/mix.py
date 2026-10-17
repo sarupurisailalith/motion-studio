@@ -3,7 +3,9 @@
 mix.py — mix music + sfx + voice-over, master to -14 LUFS / -1 dBTP, and mux into videos.
 
   - Every stem is decoded with ffmpeg (any format), resampled to 48 kHz stereo and padded with
-    silence or trimmed to --duration.
+    silence or trimmed to --duration. Without --duration the composition's length is read from
+    renders/deliver.json (the item for a --mux video), else renders/*_hits.json, looked for next
+    to the --mux videos, in P/renders/ for --out P/audio/mix.wav, and in ./renders/.
   - Music is ducked under the VO (default -14 dB, 50 ms attack with 50 ms lookahead, 300 ms release).
   - Master: two-pass ffmpeg loudnorm (I=-14, TP=-1.5, LRA=11, linear), then measured with ebur128;
     if it is off by more than 0.1 LU or the true peak is above -1.1 dBTP, a corrective gain and a
@@ -16,6 +18,7 @@ mix.py — mix music + sfx + voice-over, master to -14 LUFS / -1 dBTP, and mux i
 
 Usage:
   python3 mix.py --duration 12 --music audio/music.wav --sfx audio/sfx.wav --out audio/mix.wav
+  python3 mix.py --sfx audio/sfx.wav --out audio/mix.wav    # duration from renders/*_hits.json
   python3 mix.py --duration 12 --music m.wav --vo vo.wav --out mix.wav --stems
         # also writes mix_music_only.wav and mix_no_vo.wav (each mastered to -14 LUFS)
   python3 mix.py --duration 12 --music m.wav --sfx s.wav --out mix.wav --mux renders/comp.mp4 renders/comp_9x16.mp4
@@ -171,7 +174,7 @@ def refresh_deliver(video):
     changed = False
     for item in data.get("items", []):
         rel = item.get("video")
-        if not rel or not any((base / rel).resolve() == video for base in (dj.parent.parent, dj.parent)):
+        if not rel or not _same_video(rel, video, dj):
             continue
         streams = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_type", "-of", "json",
                                   str(video)], capture_output=True, text=True).stdout
@@ -187,6 +190,48 @@ def refresh_deliver(video):
     return None
 
 
+def _same_video(rel, video, dj):
+    return any((base / rel).resolve() == video for base in (dj.parent.parent, dj.parent))
+
+
+def find_duration(out, videos=()):
+    """--duration default -> (seconds, source file), or (None, None). deliver.json first (the items
+    for the muxed videos, else all of them), then *_hits.json; exits if a file's durations disagree."""
+    videos = [Path(v).resolve() for v in videos]
+    o = Path(out).resolve().parent
+    dirs = list(dict.fromkeys([v.parent for v in videos] + [o.parent / "renders", o / "renders",
+                                                            Path.cwd().resolve() / "renders"]))
+
+    def one(vals, src):
+        vals = sorted({round(float(v), 6) for v in vals if isinstance(v, (int, float)) and v > 0})
+        if len(vals) > 1:
+            sys.exit(f"{src} has different durations ({', '.join(f'{v:g}' for v in vals)}); pass --duration")
+        return vals[0] if vals else None
+
+    for d in dirs:
+        dj = d / "deliver.json"
+        try:
+            items = json.loads(dj.read_text()).get("items", []) if dj.is_file() else []
+        except ValueError:
+            items = []
+        mine = [i for i in items if i.get("video") and any(_same_video(i["video"], v, dj) for v in videos)]
+        dur = one([i.get("duration") for i in mine or items], dj)
+        if dur:
+            return dur, dj
+    for d in dirs:
+        hits = sorted(d.glob("*_hits.json")) if d.is_dir() else []
+        vals = []
+        for h in hits:
+            try:
+                vals.append(json.loads(h.read_text()).get("duration"))
+            except ValueError:
+                pass
+        dur = one(vals, d / "*_hits.json")
+        if dur:
+            return dur, hits[0] if len(hits) == 1 else d / "*_hits.json"
+    return None, None
+
+
 def video_duration(path):
     out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json",
                           str(path)], capture_output=True, text=True).stdout
@@ -198,7 +243,8 @@ def video_duration(path):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--duration", type=float, required=True, help="length of the mix in seconds")
+    ap.add_argument("--duration", type=float,
+                    help="length of the mix in seconds (default: from renders/deliver.json or renders/*_hits.json)")
     ap.add_argument("--out", type=Path, required=True, help="output WAV")
     ap.add_argument("--music", type=Path)
     ap.add_argument("--sfx", type=Path)
@@ -214,6 +260,12 @@ def main():
     _audio.need_ffmpeg()
     if not (a.music or a.sfx or a.vo):
         sys.exit("nothing to mix: give at least one of --music, --sfx, --vo")
+    if a.duration is None:
+        a.duration, src = find_duration(a.out, a.mux or ())
+        if a.duration is None:
+            sys.exit("no --duration and no renders/deliver.json or renders/*_hits.json to read it from; "
+                     "pass --duration (MOTION.duration)")
+        log(f"duration {a.duration:g}s from {src}")
     if a.duration <= 0:
         sys.exit("--duration must be > 0")
     sr = _audio.SR
