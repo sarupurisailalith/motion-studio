@@ -1,0 +1,31 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>K.Z kit fixture</title>
+<style>html,body{margin:0;background:#fff}</style></head>
+<body>
+<!-- Kit tests drive K.Z directly; the page is also a tiny valid composition (an orbiting
+     cluster of equal-depth shapes inside a Group, the canonicalSort case). -->
+<script src="vendor/zdog.dist.min.js"></script>
+<script src="kit.js"></script>
+<script src="kit-zdog.js"></script>
+<script src="models/pip.js"></script>
+<script src="models/bolt.js"></script>
+<script src="models/parcel.js"></script>
+<script>
+const K = window.K, TAU = Zdog.TAU;
+window.MOTION = K.init({ width: 200, height: 200, fps: 30, duration: 2, loop: true });
+const ctx = K.Z.canvas(200, 200, document.body).getContext('2d');
+const scene = new Zdog.Anchor();
+const g = new Zdog.Group({ addTo: scene, updateSort: true });
+['#e33', '#3a3', '#33e', '#fb0'].forEach((color, i) =>
+  new Zdog.Rect({ addTo: g, width: 40, height: 40, translate: { x: (i - 1.5) * 12 }, fill: true, stroke: 2, color }));
+window.NAIVE = false;
+function draw(t) {
+  g.rotate.y = t < 1 ? -0.4 : 0;   // t >= 1: four equal-z ties, whose order must not depend on history
+  if (window.NAIVE) { scene.updateGraph(); ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,200,200);
+    ctx.setTransform(1,0,0,1,100,100); scene.renderGraphCanvas(ctx); }
+  else K.Z.render(scene, ctx, { zoom: 1, cx: 100, cy: 100 });
+}
+window.ready = Promise.resolve();
+window.seek = async t => draw(t);
+</script>
+</body></html>
