@@ -418,5 +418,135 @@ class Media(unittest.TestCase):
         self.assertFalse(any(n["id"] in ("copy", "brand-guide") for n in s["notes"]), s["notes"])
 
 
+def onset(wav_path, thr=0.2):
+    """First sample above thr (channel 0) of a 16-bit WAV -> seconds."""
+    import wave
+    import numpy as np
+    with wave.open(str(wav_path)) as w:
+        x = np.frombuffer(w.readframes(w.getnframes()), "<i2").reshape(-1, w.getnchannels())[:, 0] / 32768
+        return int(np.argmax(np.abs(x) > thr)) / w.getframerate(), len(x) / w.getframerate()
+
+
+def flash_frames(folder):
+    """Indices of the (mostly) white frames of a JPEG sequence."""
+    from PIL import ImageStat
+    out = []
+    for i, p in enumerate(sorted(Path(folder).glob("*.jpg"))):
+        with Image.open(p) as im:
+            g = im.convert("L")
+            if ImageStat.Stat(g).mean[0] > 100:
+                out.append(i)
+    return out
+
+
+@helpers.needs_ffmpeg
+class ClipAudio(unittest.TestCase):
+    """E12.1: a clip's own sound -> assets/audio/<clip>-audio.wav, aligned to frame 0."""
+
+    def setUp(self):
+        self.tmp = helpers.tmpdir()
+        self.proj = self.tmp / "proj"
+
+    def make(self, name, audio_offset=0.0, video_offset=0.0):
+        """A 3 s 30 fps clip: a white flash on frame 30 (1.0 s) and a PCM square burst starting at
+        1.0 s on the same timeline; either stream may start late in the container."""
+        base = self.tmp / f"{name}_base.mkv"
+        ffmpeg("-f", "lavfi", "-i", "color=c=black:s=64x64:r=30:d=3,drawbox=c=white:t=fill:enable='eq(n,30)'",
+               "-f", "lavfi", "-i", "aevalsrc='0.5*gt(t,1)*lt(t,1.2)*sgn(sin(2*PI*500*t))':s=48000:d=3",
+               "-map", "0", "-map", "1", "-c:v", "mjpeg", "-q:v", "2", "-c:a", "pcm_s16le", base)
+        out = self.tmp / f"{name}.mkv"
+        if not (audio_offset or video_offset):
+            shutil.copyfile(base, out)
+            return out
+        # cut the late stream's head off and start it late by the same amount: both events still
+        # meet at 1.0 s on the container timeline, but the streams' start times differ
+        v, a = self.tmp / f"{name}_v.mkv", self.tmp / f"{name}_a.wav"
+        ffmpeg("-ss", video_offset, "-i", base, "-map", "0:v", "-c:v", "mjpeg", "-q:v", "2", v)
+        ffmpeg("-ss", audio_offset, "-i", base, "-map", "0:a", "-c:a", "pcm_s16le", a)
+        ffmpeg("-itsoffset", video_offset, "-i", v, "-itsoffset", audio_offset, "-i", a,
+               "-map", "0:v", "-map", "1:a", "-c", "copy", out)
+        return out
+
+    def check_aligned(self, src):
+        r, s = ingest(self.proj, src)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        inv = by_id(self.proj)
+        v = inv[src.stem]
+        self.assertEqual(v["audio"], src.stem + "-audio")
+        a = inv[v["audio"]]
+        self.assertEqual((a["kind"], a["sr"], a["of"]), ("audio", 48000, v["id"]))
+        self.assertEqual(a["path"], f"assets/audio/{src.stem}-audio.wav")
+        t, dur = onset(self.proj / a["path"])
+        frames = flash_frames(self.proj / v["path"])
+        self.assertTrue(frames, "no flash frame found")
+        self.assertAlmostEqual(dur, v["frame_count"] / v["fps"], places=3)   # same length as the frames
+        # the burst starts on the flash frame's time, within 1 ms
+        self.assertLessEqual(abs(t - frames[0] / v["fps"]), 0.001, (t, frames))
+        return v, a, s
+
+    def test_audio_written_and_aligned(self):
+        v, a, s = self.check_aligned(self.make("talk"))
+        self.assertEqual(v["frame_count"], 90)
+
+    def test_late_audio_stream_aligned(self):
+        self.check_aligned(self.make("late-audio", audio_offset=0.25))
+
+    def test_late_video_stream_aligned(self):
+        v, a, s = self.check_aligned(self.make("late-video", video_offset=0.4))
+        self.assertTrue(any("offset" in n["note"] for n in s["notes"]), s["notes"])
+
+    def test_no_audio_noted_and_stale_audio_removed(self):
+        src = self.make("clip")
+        ingest(self.proj, src)
+        self.assertIn("clip-audio", by_id(self.proj))
+        wav = self.proj / "assets" / "audio" / "clip-audio.wav"
+        self.assertTrue(wav.exists())
+        ffmpeg("-i", self.make("silent"), "-an", "-c", "copy", self.tmp / "clip2.mkv")
+        shutil.move(self.tmp / "clip2.mkv", src)                    # same path, now without sound
+        r, s = ingest(self.proj, src)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        inv = by_id(self.proj)
+        self.assertNotIn("clip-audio", inv)
+        self.assertNotIn("audio", inv["clip"])
+        self.assertFalse(wav.exists())
+        self.assertTrue(any("no audio stream" in n["note"] for n in s["notes"]), s["notes"])
+
+    def test_clip_max_dim_and_piece_fps(self):
+        src = self.tmp / "wide.mp4"
+        ffmpeg("-f", "lavfi", "-i", "testsrc=duration=1:size=800x400:rate=50", "-pix_fmt", "yuv420p", src)
+        self.proj.mkdir(parents=True)
+        (self.proj / "promo.html").write_text("<script>window.MOTION = { width: 1080, height: 1920, fps: 25, "
+                                              "duration: 4 };</script>")
+        r = helpers.run_script("ingest.py", self.proj, src, "--clip-max-dim", "200", "--max-dim", "3840")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        e = by_id(self.proj)["wide"]
+        self.assertEqual((e["w"], e["h"], e["fps"], e["frame_count"]), (200, 100, 25, 25))
+
+    def test_fps_from_brief_then_default(self):
+        src = self.tmp / "c.mp4"
+        ffmpeg("-f", "lavfi", "-i", "testsrc=duration=1:size=64x64:rate=60", "-pix_fmt", "yuv420p", src)
+        self.proj.mkdir(parents=True)
+        (self.proj / "brief.md").write_text("<deliverable> 20.00 s, 1080x1920, 60 fps, no loop\n")
+        r, s = ingest(self.proj, src)
+        self.assertEqual(by_id(self.proj)["c"]["fps"], 60)
+        (self.proj / "brief.md").unlink()
+        r, s = ingest(self.proj, src)
+        self.assertEqual(by_id(self.proj)["c"]["fps"], 30)
+        self.assertTrue(any("--clip-fps" in n["note"] for n in s["notes"]), s["notes"])
+
+    def test_vfr_source_resampled_to_constant_rate(self):
+        # frames at irregular times (VFR): 0, 0.02, 0.1, 0.13, ... ; ingest must give k / fps timing
+        src = self.tmp / "vfr.mp4"
+        ffmpeg("-f", "lavfi", "-i", "testsrc=duration=2:size=64x64:rate=60",
+               "-vf", "select='not(mod(n\\,3))+eq(mod(n\\,7)\\,1)'", "-fps_mode", "vfr",
+               "-c:v", "libx264", "-pix_fmt", "yuv420p", src)
+        r, s = ingest(self.proj, src)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        e = by_id(self.proj)["vfr"]
+        self.assertEqual(e["fps"], 30)
+        self.assertAlmostEqual(e["frame_count"], 60, delta=1)
+        self.assertTrue(any("variable frame rate" in n["note"] for n in s["notes"]), s["notes"])
+
+
 if __name__ == "__main__":
     unittest.main()
