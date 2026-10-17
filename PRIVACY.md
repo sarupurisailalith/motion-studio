@@ -25,7 +25,7 @@ The plugin's own downloads happen only when you set things up:
 
 | When | What is downloaded | From |
 |---|---|---|
-| You install the requirements | `playwright`, `numpy`, `pillow` (and optionally `librosa`) | PyPI |
+| You install the requirements | `playwright`, `numpy`, `pillow` (and optionally `librosa`, `pypdf`) | PyPI |
 | You run `python3 -m playwright install chromium` | A Chromium build | Playwright's download host |
 | You (or the agent, for a Three.js/GSAP/Lottie piece) run `vendor.py` | Exact pinned versions of `three`, `gsap`, `lottie-web` | The npm registry |
 

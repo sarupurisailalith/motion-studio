@@ -11,7 +11,8 @@ before a human looks. Taste comes from a tight brief and concrete numbers, not f
 
 `SKILL_DIR` = the folder holding this file (in Claude Code: `${CLAUDE_PLUGIN_ROOT}/skills/motion-video`).
 Needs Python 3 with `pip install playwright numpy pillow`, `python3 -m playwright install chromium`,
-and ffmpeg. Check once with `python3 SKILL_DIR/scripts/render.py --help`. `S=SKILL_DIR/scripts`;
+and ffmpeg. Check once with `python3 SKILL_DIR/scripts/doctor.py` (prints the exact install command
+for anything missing; installs nothing). `S=SKILL_DIR/scripts`;
 project folder `P = ./motion/<slug>/`, composition `P/<slug>.html`, duration `D`.
 
 ## Workflow
@@ -26,6 +27,11 @@ rounds if wanted, approval gate). Adapt the closest playbook in `references/genr
   `python3 $S/ingest.py P <paths…> [--attached]` copies and normalises them into `P/assets/`
   with `assets.json`. Refer to them by id; use them as-is, never redraw or stand in for one.
   Read `references/assets.md` (fonts, images, SVG, clips via `K.loadClip`).
+- **Brand check** (when a logo, screenshots, fonts or a brand guide were supplied):
+  `python3 $S/brand.py P` → `P/brand.json` + `P/docs/brand_swatch.png` (palette chips, two font
+  samples). Show the swatch; the user confirms or overrides (`brand.py P --role accent=#hex
+  --font display="Family" --confirm`). Write the confirmed hexes, roles and fonts into the brief's
+  `<art direction>`. Unattended: use the suggestion and say so.
 
 ### 2. Storyboard, then sign-off
 Table: `time | on screen | purpose | exit | carried object`. About one idea per 1–2 s; hook in
@@ -34,13 +40,18 @@ lockup (≈1 s). With music, pin scene changes to beats. If the user is present,
 storyboard and format list and wait for approval; otherwise continue and state the assumption.
 
 ### 3. Build from a template
-Copy the template **and `templates/kit.js`** into `P` (the template loads the kit from its own
-folder) and replace the demo scene.
+`python3 $S/scaffold.py <name> --template 2d|three|gsap|glsl --formats 9x16,1x1 --duration D`
+creates `P` with the template (MOTION size, fps, duration set), `kit.js`, a `brief.md` skeleton
+(kept if one exists) and `assets/ audio/ docs/ renders/`. Or copy the template **and
+`templates/kit.js`** into `P` by hand. Then replace the demo scene.
 | Template | Use for |
 |---|---|
-| `templates/composition.html` | DOM/SVG/Canvas 2D: type, UI, explainers, most motion graphics. Preview player built in (Space, ←/→, F formats, G safe areas, `?t=3.2`). |
-| `templates/three-composition.html` | Three.js. `python3 $S/vendor.py P three` first; render with `--gl`. Preview needs http: `python3 -m http.server` in `P` (ES modules don't load from `file://`). |
-| GSAP | One **paused** master timeline; `seek(t)` = `tl.seek(t, false)`. `vendor.py P gsap`. |
+| `templates/composition.html` (`2d`) | DOM/SVG/Canvas 2D: type, UI, explainers, most motion graphics. Preview player built in (Space, ←/→, F formats, G safe areas, `?t=3.2`). |
+| `templates/three-composition.html` (`three`) | Three.js. `python3 $S/vendor.py P three` first; render with `--gl`. Preview needs http: `python3 -m http.server` in `P` (ES modules don't load from `file://`). |
+| `templates/gsap-composition.html` (`gsap`) | One **paused** master timeline; `seek(t)` = `tl.seek(t, false)`. `vendor.py P gsap` first. |
+| `templates/glsl-composition.html` (`glsl`) | Fragment shader on one full-frame triangle, `uTime` from `seek(t)`, loops by phase; DOM type on top. Render with `--gl`. |
+Kit examples: `templates/examples/kinetic-type.html` (type kit + springs), `device-demo.html`
+(a screenshot in browser and phone frames, Canvas and DOM).
 
 **Contract** (render.py depends on it): `window.MOTION = {width,height,fps,duration,loop,hits?}`,
 `window.ready` (Promise: fonts, images, beats, clips decoded), `window.seek(t)` draws the exact
@@ -49,6 +60,10 @@ frame for `t`, in any order, any number of times.
 **Kit** (`window.K`, see the comments in kit.js): closed-form springs and `springTrack`, `track`
 keyframes, `bezier`, seeded `rand`, `noise`, `stagger`, `wrap`; beats `K.T/K.U/K.at`
 (needs `beats.js` above the kit script); `K.resolveHits`; clips `K.loadClip/K.clipFrame/K.drawClip`.
+Spring presets `K.SPRING.snappy|ui|soft|camera` (pass one where `w, z` go), `K.wobble`/`K.squash`
+for one impact. Images `K.cover`/`K.crop` (ctx or element; focal point, zoom, radius; crop and
+scale only) and device frames `K.device` (DOM) / `K.drawDevice` (Canvas). Type `K.glyphs`,
+`K.layoutText`/`K.drawGlyphs`, `K.fitText`, `K.rise`/`K.maskRise`, `K.typed`, `K.scramble`.
 
 **Formats** (`references/formats.md`): call `K.init(MOTION)` right after defining MOTION. One
 timeline; only layout changes per format, via `K.pick({ '9x16': …, default: … })` and

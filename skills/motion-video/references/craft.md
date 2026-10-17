@@ -6,6 +6,7 @@ Concrete numbers beat adjectives. Use these as defaults; deviate on purpose.
 - Closed-form critically damped spring: `1 - (1 + ωt)·e^(−ωt)`, with ω between 12 and 40, "so nothing ever passes its target". Use exponential ease-in/out for wipes, presses and exits.
 - When a value changes target many times, sum one spring step-response per change. The value then stays a pure function of t.
 - Damping numbers: shape ζ 0.72 with settle 0.35 s, camera ζ 1.0 with settle 0.6 s. The camera settles more slowly than the shape.
+- Kit presets (settle = within 2 % of the target): `K.SPRING.snappy` ω 38.8 ζ 1, 0.15 s (presses, toggles) · `.ui` ω 16.9 ζ 0.72, 0.35 s, 3.8 % overshoot (shapes, cards) · `.soft` ω 11.7 ζ 1, 0.5 s (big panels) · `.camera` ω 9.7 ζ 1, 0.6 s. Impacts: `K.squash(dt)` (volume-preserving, 12 % peak) or `K.wobble(dt)`, on one element only.
 - The morph curve `cubic-bezier(.45,0,.15,1)` over 0.8 s, with the camera zoom riding the same curve so the shape changes "barely notice". For editorial entrances use `cubic-bezier(.16,1,.3,1)` over 0.6–0.8 s.
 - "Arrive fast, land soft": cover 12–19% of the remaining distance per frame.
 - "Tiny overshoot at most". "No repeated bouncing or large elastic overshoots". Elastic deformation is reserved for one element only.
@@ -41,7 +42,7 @@ Concrete numbers beat adjectives. Use these as defaults; deviate on purpose.
 
 ### Text reveal styles
 - Letters rise through a mask line one by one. This is the most common reveal.
-- Typing derived from time: `chars = floor(progress × length)`, with a caret that blinks only when idle and a natural keystroke rhythm.
+- Typing derived from time: `chars = floor(progress × length)`, with a caret that blinks only when idle and a natural keystroke rhythm (`K.typed(text, t, {at, cps})`). Rises: `K.glyphs` + `K.maskRise` (DOM) or `K.layoutText` + `K.rise` + `K.drawGlyphs(…, {mask: true})` (Canvas); size headlines with `K.fitText`. Scrambles: `K.scramble(text, t, {at, dur, seed, snap})`.
 - Captions light word by word on TTS or whisper timestamps (grey→white over 0.2 s). Keep them to 7 words or fewer, one idea per shot, with hand-placed line breaks.
 - Other styles: rolling word swaps (vertical), scrambles (seeded Fisher–Yates per glyph) that snap on the beat, counters with tabular numerals, and print misregistration (±2–4 px magenta and green at 40%) on accent frames only.
 - Type sizing rules: "Text should feel like product advertising, not oversized presentation headings". Display tracking of −40 to −80 (or −0.07 em at line-height 0.85), mono at +20. No full stops on headlines.

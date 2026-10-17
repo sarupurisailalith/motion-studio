@@ -27,7 +27,10 @@ Script: `${CLAUDE_PLUGIN_ROOT}/skills/motion-video/scripts/ingest.py`. Reference
    stand-in for a missing asset.
 6. **Ask the user to confirm** that they own these assets or have permission to use them in
    this video. Font files are used only for this render and are never redistributed.
-7. **Next step.** Suggest `/motion-brief` (or `/motion` if a brief already exists). The brief
+7. **Brand.** With a logo, screenshots, fonts or a brand guide among them, run
+   `python3 ${CLAUDE_PLUGIN_ROOT}/skills/motion-video/scripts/brand.py <project>` and show
+   `docs/brand_swatch.png` so the user can confirm or override the palette and fonts.
+8. **Next step.** Suggest `/motion-brief` (or `/motion` if a brief already exists). The brief
    names which asset id appears in which beat. Supplied assets are used as-is.
 
 Never invent assets, logos, screenshots or product UI. Never fetch anything from the network
