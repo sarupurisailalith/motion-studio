@@ -68,7 +68,7 @@ def use(proj: Path, ids):
         shutil.copy2(CAT / "models" / f"{mid}.js", proj / "models" / f"{mid}.js")
         print("copied", proj / "models" / f"{mid}.js")
     copy_kit(proj)
-    print(f"load after kit-zdog.js: " + " ".join(f'<script src="models/{m}.js"></script>' for m in ids))
+    print("load after kit-zdog.js: " + " ".join(f'<script src="models/{m}.js"></script>' for m in ids))
 
 
 def turntable(mid, d: Path, vendor=None):

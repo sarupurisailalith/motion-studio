@@ -4,7 +4,6 @@ palettes (E1.10), sample-based SFX (E12.13) and mix.py's --duration default (D.3
 All test audio is generated in code (numpy) and written to helpers.tmpdir().
 """
 import json, sys, textwrap, unittest
-from pathlib import Path
 
 import numpy as np
 

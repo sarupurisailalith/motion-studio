@@ -2,7 +2,7 @@
 `requestfailed` fix (E10.8). Engine templates and kits are tested in test_zdog.py,
 test_p5.py and test_layers.py. Tests that need zdog / p5 vendor them at test time
 (helpers.vendored) and skip when offline."""
-import json, shutil, unittest
+import json, unittest
 
 import helpers
 from helpers import copy_fixture, parse_report, run_script, tmpdir
