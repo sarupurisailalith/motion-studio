@@ -8,7 +8,6 @@ for code, in the file header too. Third-party code the plugin downloads for a pr
 
 | Source | Licence | What we took | Where |
 |---|---|---|---|
-| Motion Reel | MIT | Workflow and craft patterns distilled into the skill. Ideas only; no code is copied. | `skills/motion-video/` references |
 | [WCAG 2.x](https://www.w3.org/TR/WCAG21/) (W3C) | W3C document licence | The relative-luminance and contrast-ratio formulas and the 4.5:1 threshold behind the `contrast` gate. | `render.py` (`rel_luminance`, `text_contrast`) |
 
 ## Tools the scripts run on
