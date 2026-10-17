@@ -103,10 +103,15 @@ def with_vendor(dst_dir, *names) -> Path:
 
 def find_ttf():
     """Any local TrueType font (test fixtures that call loadFont / Zfont need one), or None."""
-    for d in ["/System/Library/Fonts/Supplemental", "/Library/Fonts", "/usr/share/fonts",
-              "/usr/local/share/fonts", str(Path.home() / "Library/Fonts"), "C:/Windows/Fonts"]:
-        p = Path(d)
-        if p.is_dir():
-            for f in sorted(p.rglob("*.ttf")):
-                return f
+    dirs = [Path(d) for d in ["/System/Library/Fonts/Supplemental", "/Library/Fonts", "/usr/share/fonts",
+                              "/usr/local/share/fonts", str(Path.home() / "Library/Fonts"), "C:/Windows/Fonts"]]
+    dirs = [d for d in dirs if d.is_dir()]
+    for name in ("Arial Bold.ttf", "Arial.ttf", "DejaVuSans-Bold.ttf", "DejaVuSans.ttf", "arial.ttf"):
+        for d in dirs:
+            hit = next(iter(sorted(d.rglob(name))), None)
+            if hit:
+                return hit
+    for d in dirs:
+        for f in sorted(d.rglob("*.ttf")):
+            return f
     return None
