@@ -20,8 +20,9 @@ Render and QA: $ARGUMENTS
 3. **Look.** `$R <file> [--format F] --sheet` (one sheet per format; `--phone` when reviewing readability), and as needed `--stills 1,2.5`,
    `--strip A:B:N` (across a transition), `--poster [T]` (put it after the HTML path),
    `--contact beats` (needs beats.js). Open the PNGs and judge them.
-4. **Render** with the user's flags (default `--subframes 3`; `--gl` for WebGL; `--workers N`;
-   `--scale 2` for crisper type). `--format 16x9,9x16,1x1,4x5` renders each format
+4. **Render** with the user's flags (default `--subframes 3`; `--gl` for WebGL; `--workers N`, default
+   the CPU count up to 6; `--scale 2` for crisper type). A rerun where only `--audio` changed reuses the
+   cached video (`renders/.cache/`, `--no-cache` to force); `--capture screenshot` is the v0.2 capture path. `--format 16x9,9x16,1x1,4x5` renders each format
    (`renders/<stem>_<fmt>.mp4`); `--deliver` adds a poster and sheet per format plus
    `renders/deliver.json`. `--audio track.wav` muxes and normalises to −14 LUFS; for SFX or a
    mix across formats use `/motion-audio` (`mix.py --mux` keeps deliver.json current).
