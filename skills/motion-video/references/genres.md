@@ -79,3 +79,20 @@ Give the showreel a structure beyond a sequence of effects:
 
 ### 16 Audio-reactive / self-scoring
 - **Pattern:** Score first. Export every beat as data. Run an FFT on the film's own mix so the EQ bars show the real track. Grade one still per beat on a 1–10 scale.
+
+## Engine recipes (zdog / p5)
+
+Tested starting points in `templates/recipes/`; each passes every gate as shipped. Copy one next to
+`kit.js` and its add-on kit (and `vendor/`, models) instead of the plain template when it fits.
+| genre | recipe | engine | technique |
+|---|---|---|---|
+| generative / abstract loop | `templates/p5-composition.html` (flow field) | p5 | lines integrated from seeded starts inside each frame; `K.loopNoise` seam |
+| generative / abstract loop | `recipes/p5-noise-terrain.html` | p5 | stacked ridges over loop-periodic noise; also a background plate |
+| generative / abstract loop | `recipes/p5-particle-choreography.html` | p5 | closed-form particles: seeded orbits blended into a target shape (no sim state) |
+| glyph kinetic type | `recipes/p5-glyph-points.html` | p5 | `textToPoints` from a local font, assemble → breathe → scatter; `K.proxy` for the gates |
+| beat visuals | `recipes/p5-beat-pulse.html` | p5 | pulses from `beats.js` beats (fallback grid), downbeat hits in `MOTION.hits`; never live audio |
+| illustrated 3D / mascot explainer | `recipes/zdog-mascot-explainer.html` | zdog | catalog Pip + chart-bars, rig clips, DOM labels pinned with `K.Z.project` |
+| character scene, diorama | `templates/zdog-composition.html`, `templates/layered-composition.html` | zdog, layered | rig clips; p5 sky behind a Zdog forest |
+
+Data in a recipe (the explainer's bar values) is a placeholder: replace it with the brief's real,
+sourced numbers.

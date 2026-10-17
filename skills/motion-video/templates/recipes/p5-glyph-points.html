@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Recipe — glyph points (p5 kinetic type)</title>
+<!--
+  RECIPE · glyph kinetic type: a word sampled into points (textToPoints) assembles from a seeded
+  scatter, breathes with loop-periodic noise, then scatters again. Needs vendor/p5.min.js,
+  kit.js, kit-p5.js and a LOCAL font at assets/display.ttf (ingest.py P font.ttf; never a URL).
+  Preview over http (loadFont fetches): python3 -m http.server.
+  p5 2.x: textToPoints reads the current textSize() (set it first); loadFont is awaited in setup.
+  The word is drawn on the canvas, so a K.proxy box (kit-layers.js) carries it to the gates.
+  Knobs: WORD, sampleFactor (density), the envelope keys.
+-->
+<style>html,body{margin:0;background:#000;overflow:hidden}#stage{position:absolute;left:0;top:0;overflow:hidden}</style>
+</head>
+<body>
+<div id="stage"></div>
+<script src="vendor/p5.min.js"></script>
+<script src="kit.js"></script>
+<script src="kit-p5.js"></script>
+<script src="kit-layers.js"></script>
+<script>
+const K = window.K, TAU = Math.PI * 2;
+window.MOTION = K.init({ width: 1080, height: 1080, fps: 30, duration: 6, loop: true, hits: [[1.6, 'assemble', 'shimmer']] });
+const { W, H } = K.FORMAT, D = window.MOTION.duration, S = K.safe.ui;
+const stage = document.getElementById('stage');
+stage.style.cssText += `;width:${W}px;height:${H}px`;
+const WORD = 'motion', SIZE = Math.round(Math.min(S.w / (WORD.length * 0.62), 260));
+const io = K.bezier(.45, 0, .15, 1);
+let pts = [], box = null;
+const proxy = K.proxy('glyph-word', null);
+
+const sk = K.sketch({
+  parent: stage, seed: 4,
+  setup: async p => {
+    const font = await p.loadFont('assets/display.ttf');
+    p.textFont(font); p.textSize(SIZE);                  // textToPoints reads this size
+    const b = font.textBounds(WORD, 0, 0);
+    const x = Math.round(S.x + S.w / 2 - b.w / 2 - b.x), y = Math.round(S.y + S.h / 2 - b.h / 2 - b.y);
+    pts = font.textToPoints(WORD, x, y, { sampleFactor: 0.22 });
+    box = { x: x + b.x, y: y + b.y, w: b.w, h: b.h };
+  },
+  draw: (p, t) => {
+    p.background('#F2EFE9'); p.noStroke(); p.fill('#111111');
+    const asm = K.track([[0, 0], [0.6, 0], [1.6, 1, io], [4.4, 1], [5.4, 0, io], [D, 0]], t);
+    const n = K.loopNoise(t, D, 0.7);
+    pts.forEach((q, i) => {
+      const g = K.clamp(asm * 1.3 - 0.3 * K.rand(3, i));
+      const sx = S.x + K.rand(1, i) * S.w, sy = S.y + K.rand(2, i) * S.h;
+      const wob = (p.noise(q.x * 0.01 + n.x, q.y * 0.01 + n.y) - 0.5) * 10 * g;
+      p.circle(K.lerp(sx, q.x, g) + wob, K.lerp(sy, q.y, g) + wob, 3 + 4 * g);
+    });
+    // readable only while assembled: opacity ≥ 0.9 there, 0 while scattered
+    proxy.set(box, asm > 0.95 ? 1 : 0);
+  },
+});
+window.ready = sk.ready;
+window.seek = t => sk.seek(t);
+if (!new URLSearchParams(location.search).has('render')) {
+  sk.ready.then(() => { const t0 = performance.now(); const tick = async () => { await window.seek(K.wrap((performance.now() - t0) / 1000, D)); requestAnimationFrame(tick); }; tick(); });
+}
+</script>
+</body>
+</html>

@@ -21,6 +21,9 @@ names. Pass `--quiet` to render.py. Keep script output out of replies; quote num
    exact copy or numbers, the song, platform). Default the rest and state it.
    Asset paths or chat attachments → `python3 $S/ingest.py P <paths…>` first (`--attached`
    for uploads), and use the asset ids in the brief. Never invent assets or claims.
+   Set the brief's `<renderer>` (2d | zdog | p5 | three | layered; default 2d). For zdog or
+   layered, run `python3 $S/catalog.py search <subject words>` and list the matches in
+   `<assets>` (as `catalog:<id>`) before building; model new only when nothing fits.
 2. **Dependencies**, once: `python3 $S/render.py --help` and `ffmpeg -version`. On failure,
    print and stop: `pip install playwright numpy pillow`,
    `python3 -m playwright install chromium`, ffmpeg (`brew install ffmpeg` /
@@ -28,8 +31,12 @@ names. Pass `--quiet` to render.py. Keep script output out of replies; quote num
 3. **Sign-off gate.** Show the storyboard table and the format list (`F`, e.g. `9x16,1x1`,
    from `<formats>`). If the user is present, stop and wait for approval. In unattended runs,
    continue and state the assumption.
-4. **Build.** Copy `templates/composition.html` (or `three-composition.html`) **and**
-   `templates/kit.js` into `P`. If a track was supplied, run
+4. **Build.** Copy the template for the brief's `<renderer>` **and** `templates/kit.js` into `P`:
+   2d `composition.html`; zdog `zdog-composition.html` + `kit-zdog.js` (`vendor.py P zdog`,
+   `catalog.py use P <ids>`, read `references/zdog.md`); p5 `p5-composition.html` + `kit-p5.js`
+   (`vendor.py P p5`, p5 rules in `references/gotchas.md`); three `three-composition.html`
+   (`vendor.py P three`, render with `--gl`); layered `layered-composition.html` + the kits of
+   its layers + `kit-layers.js`. If a track was supplied, run
    `python3 $S/beats.py --track <song> --duration D --out P` before timing any scene, and
    include `beats.js` before the kit script. Lay out per format with `K.pick`, keep
    `[data-safe]` text inside `K.safe.ui`, put the brief's hits in `MOTION.hits`.

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Recipe — particle choreography (p5)</title>
+<!--
+  RECIPE · generative loop: 900 particles drift on seeded orbits, gather into a ring on the beat
+  of the loop, hold, and scatter back. Needs vendor/p5.min.js, kit.js, kit-p5.js.
+  Technique: every particle position is CLOSED FORM in t (seeded orbit blended with a target
+  shape by an eased envelope), so there is no simulation state and any t can be drawn first.
+  Use K.presim instead only when particles truly interact (collisions, flocking).
+  Knobs: N, the target shape (ring → any point list, e.g. textToPoints), the envelope keys.
+-->
+<style>html,body{margin:0;background:#000;overflow:hidden}#stage{position:absolute;left:0;top:0;overflow:hidden}</style>
+</head>
+<body>
+<div id="stage"></div>
+<script src="vendor/p5.min.js"></script>
+<script src="kit.js"></script>
+<script src="kit-p5.js"></script>
+<script>
+const K = window.K, TAU = Math.PI * 2;
+window.MOTION = K.init({ width: 1080, height: 1080, fps: 30, duration: 6, loop: true, hits: [[2.2, 'gather', 'swell']] });
+const { W, H } = K.FORMAT, D = window.MOTION.duration;
+document.getElementById('stage').style.cssText += `;width:${W}px;height:${H}px`;
+const N = 900, R = 0.28 * Math.min(W, H), io = K.bezier(.45, 0, .15, 1);
+const PAL = { bg: '#0B1020', a: '#7CC3FF', b: '#FFC53D' };
+
+const sk = K.sketch({
+  parent: document.getElementById('stage'), seed: 2,
+  draw: (p, t) => {
+    p.background(PAL.bg); p.noStroke();
+    const gather = K.track([[0, 0], [1.2, 0], [2.2, 1, io], [3.8, 1], [5.0, 0, io], [D, 0]], t);
+    const ca = p.color(PAL.a), cb = p.color(PAL.b);
+    for (let i = 0; i < N; i++) {
+      // free motion: a seeded ellipse orbit with whole turns per loop (periodic over D)
+      const turns = 1 + Math.floor(K.rand(4, i) * 2), ph = TAU * K.rand(5, i);
+      const a = ph + TAU * turns * t / D * (K.rand(6, i) < 0.5 ? 1 : -1);
+      const ox = W / 2 + Math.cos(a) * W * (0.1 + 0.4 * K.rand(7, i));
+      const oy = H / 2 + Math.sin(a) * H * (0.1 + 0.4 * K.rand(8, i));
+      // target: an even ring, slowly turning (also whole turns per loop)
+      const b = TAU * i / N + TAU * t / D;
+      const tx = W / 2 + Math.cos(b) * R, ty = H / 2 + Math.sin(b) * R;
+      const g = K.clamp(gather * 1.25 - 0.25 * K.rand(9, i));     // staggered arrival
+      p.fill(p.lerpColor(ca, cb, g));
+      p.circle(K.lerp(ox, tx, g), K.lerp(oy, ty, g), 3 + 2 * g);
+    }
+  },
+});
+window.ready = sk.ready;
+window.seek = t => sk.seek(t);
+if (!new URLSearchParams(location.search).has('render')) {
+  sk.ready.then(() => { const t0 = performance.now(); const tick = async () => { await window.seek(K.wrap((performance.now() - t0) / 1000, D)); requestAnimationFrame(tick); }; tick(); });
+}
+</script>
+</body>
+</html>

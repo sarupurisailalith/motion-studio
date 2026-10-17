@@ -67,6 +67,29 @@ class VendorDocs(unittest.TestCase):
             self.assertNotIn(p.name, ("p5.min.js", "zdog.dist.min.js", "zfont.min.js"), p)
 
 
+class RendererDocs(unittest.TestCase):
+    """E10.14: the brief's <renderer> field picks the template; docs list every renderer."""
+    RENDERERS = {"2d": "composition.html", "zdog": "zdog-composition.html", "p5": "p5-composition.html",
+                 "three": "three-composition.html", "layered": "layered-composition.html"}
+
+    def test_brief_template_has_renderer_field(self):
+        brief = (helpers.SKILL / "references" / "brief-template.md").read_text()
+        self.assertIn("<renderer>", brief)
+        for r in self.RENDERERS:
+            self.assertRegex(brief, rf"\n\s+{r}\s", r)
+
+    def test_skill_and_motion_map_renderers_to_templates(self):
+        skill = (helpers.SKILL / "SKILL.md").read_text()
+        motion = (helpers.ROOT / "commands" / "motion.md").read_text()
+        for r, tpl in self.RENDERERS.items():
+            self.assertTrue((helpers.TEMPLATES / tpl).exists(), tpl)
+            self.assertIn(f"`{r}`", skill)
+            self.assertIn(tpl, skill)
+            self.assertIn(tpl, motion)
+        self.assertIn("catalog.py search", skill)
+        self.assertIn("catalog.py search", motion)
+
+
 def refetch(missing=False):
     d = tmpdir()
     html = copy_fixture("engines/refetch.html", d)
