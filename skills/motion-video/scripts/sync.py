@@ -10,9 +10,11 @@ in sfx_events.json within ±100 ms of its expected onset:
     sample-exact when both agree. Holds up under music as long as the SFX is audible.
   - onset (fallback, no stem): nearest onset on a 1.3 ms energy envelope. Fine for an SFX-only
     track; under busy music a drum hit can be nearer than the SFX, so keep the stem around.
-A transient sound (tick, click, pop, thud, blip, impact, type-key) more than --tol-ms off, or
-not audible at all, is a FAIL. Non-transient sounds (whoosh, riser, swell, ...) are reported
-with status "info" and never fail.
+A transient sound (tick, click, pop, thud, blip, impact, type-key, splash, chime, or one a project
+palette registered with transient=True) more than --tol-ms off, or not audible at all, is a FAIL.
+Non-transient sounds (whoosh, riser, swell, ...) are reported with status "info" and never fail.
+Each event's "transient" flag (written by sfx.py) decides; older events files fall back to the
+built-in set.
 
 Usage:
   python3 sync.py audio/mix.wav audio/sfx_events.json
@@ -31,8 +33,7 @@ except ImportError:
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _audio  # noqa: E402
-
-TRANSIENT = {"tick", "click", "pop", "thud", "blip", "impact", "type-key"}
+from sfx import TRANSIENT  # noqa: E402  (one list of gated sounds, shared with sfx.py)
 HOP = 64
 SEARCH = 0.100   # s either side of the expected onset
 
@@ -168,7 +169,7 @@ def measure(mono, sr, events, tol_ms=20, ref=None):
             near = found[np.abs(found - exp) <= SEARCH] if len(found) else found
             det = float(near[np.argmin(np.abs(near - exp))]) if len(near) else None
         off = round((det - exp) * 1000, 2) if det is not None else None
-        if e.get("sfx") not in TRANSIENT:
+        if not e.get("transient", e.get("sfx") in TRANSIENT):
             status = "info"
         elif det is None:
             status = "FAIL not audible"
