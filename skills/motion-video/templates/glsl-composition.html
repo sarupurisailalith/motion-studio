@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Motion Composition — GLSL shader</title>
+<!--
+  MOTION STUDIO — deterministic fragment-shader template (WebGL, no library).
+  Copy this file AND kit.js into the project folder. Render with:  render.py this.html --gl
+
+  Same contract as composition.html: window.MOTION, window.ready, window.seek(t).
+  One full-frame triangle; the fragment shader gets uTime = t from seek(t), so every frame is a pure
+  function of t. SHADER RULES
+    - Loops: drive motion with phase = 2π·uTime/uDuration (sin/cos of it, or whole turns), so
+      t = D draws the same picture as t = 0. Never feed back the previous frame (no ping-pong buffers).
+    - Noise: hash-based, from coordinates and uTime only (no Math.random uniforms per frame).
+    - preserveDrawingBuffer: true, so the screenshot reads the frame seek(t) drew.
+    - Keep precision highp; SwiftShader (--gl) is deterministic, but avoid huge uTime-scaled values
+      (sin(uTime * 1e4)) where float error grows.
+  Type sits in the DOM above the canvas (data-safe / data-text work as usual).
+  Preview: open the file in a browser (Chrome/Safari with WebGL); Space pauses, F formats, ?t=2.
+-->
+<style>
+  :root{ --ink:#f6f3ee; --font-display: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  html,body{margin:0;height:100%;background:#000;overflow:hidden}
+  #stage{position:absolute;left:0;top:0;transform-origin:0 0;overflow:hidden;background:#000}
+  #gl{position:absolute;left:0;top:0;display:block}
+  #title{position:absolute;font-family:var(--font-display);font-weight:800;color:var(--ink);line-height:1;
+         white-space:nowrap;letter-spacing:-0.04em;text-align:center}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="gl"></canvas>
+  <div id="title" data-safe data-text>SHADER</div>
+</div>
+<!-- Cutting to music? Run beats.py, then load beats.js on the line ABOVE the kit script. -->
+<script src="kit.js"></script>
+<script>
+const K = window.K;
+window.MOTION = { width: 1920, height: 1080, fps: 30, duration: 8, loop: true, hits: [[1.0, 'title-in', 'swell']] };
+K.init(window.MOTION);
+const { width: W, height: H, duration: D } = window.MOTION;
+
+/* =========================================================================
+   SHADER — replace with the real piece. Demo: slow domain-warped colour fields in the palette,
+   one full loop per D (every term is periodic in phase).
+   ========================================================================= */
+const PALETTE = ['#101114', '#ff4d1f', '#f2efe9'];   // brief hexes: bg, accent, light
+const FRAG = `
+precision highp float;
+uniform vec2 uResolution;
+uniform float uTime, uDuration;
+uniform vec3 uBg, uAccent, uLight;
+const float TAU = 6.28318530718;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float noise(vec2 p) {
+  vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);
+}
+void main() {
+  vec2 uv = (gl_FragCoord.xy - 0.5 * uResolution) / min(uResolution.x, uResolution.y);
+  float ph = TAU * uTime / uDuration;                     // 0..TAU over the loop
+  vec2 drift = 0.35 * vec2(cos(ph), sin(ph));              // a circle in noise space: loops exactly
+  vec2 q = uv * 2.2 + drift;
+  float n = noise(q + 1.7 * vec2(noise(q * 1.3 + drift.yx), noise(q * 1.1 - drift)));
+  float band = smoothstep(0.42, 0.58, n + 0.12 * sin(ph + uv.x * 3.0));
+  vec3 col = mix(uBg, uAccent, band);
+  col = mix(col, uLight, smoothstep(0.78, 0.95, n) * 0.6);
+  col *= 1.0 - 0.35 * dot(uv, uv);                          // soft vignette
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+/* =========================================================================
+   RUNTIME — WebGL setup and seek (normally no edits needed below)
+   ========================================================================= */
+const $ = id => document.getElementById(id);
+const stage = $('stage'), canvas = $('gl'), title = $('title');
+stage.style.width = W + 'px'; stage.style.height = H + 'px';
+canvas.width = W; canvas.height = H;
+const gl = canvas.getContext('webgl', { preserveDrawingBuffer: true, antialias: false, premultipliedAlpha: false });
+if (!gl) throw new Error('WebGL unavailable: render with render.py --gl (SwiftShader), or preview in a WebGL browser');
+function compile(type, src) {
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error('shader compile: ' + gl.getShaderInfoLog(s));
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, 'attribute vec2 p; void main() { gl_Position = vec4(p, 0.0, 1.0); }'));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error('shader link: ' + gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);   // one full-frame triangle
+const loc = gl.getAttribLocation(prog, 'p');
+gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+const U = name => gl.getUniformLocation(prog, name);
+const rgb = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
+gl.viewport(0, 0, W, H);
+gl.uniform2f(U('uResolution'), W, H);
+gl.uniform1f(U('uDuration'), D);
+['uBg', 'uAccent', 'uLight'].forEach((u, i) => gl.uniform3fv(U(u), rgb(PALETTE[i])));
+
+// DOM type over the shader: fitted to the UI-safe width, rises in, leaves before the loop
+const S = K.safe.ui;
+function layout() {
+  K.fitText(title, S.w * 0.7, { max: 220 });
+  const tw = title.offsetWidth, th = title.offsetHeight;
+  title.style.left = Math.round(S.x + (S.w - tw) / 2) + 'px';
+  title.style.top = Math.round(S.y + (S.h - th) / 2) + 'px';
+}
+function render(t) {
+  gl.uniform1f(U('uTime'), t);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  const a = K.seg(t, 1.0, 1.5) * (1 - K.seg(t, D - 1.5, D - 1.0));
+  title.style.opacity = a > 0.001 ? a : 0;
+  title.style.transform = `translateY(${Math.round(24 * (1 - K.ease.outCubic(K.seg(t, 1.0, 1.6))))}px)`;
+}
+
+const params = new URLSearchParams(location.search);
+const RENDER_MODE = params.has('render');
+window.ready = (async () => {
+  if (document.fonts && document.fonts.ready) await document.fonts.ready;
+  layout();
+})();
+window.seek = async (t) => { await window.ready; render(t); };
+
+function fit() {
+  if (RENDER_MODE) { stage.style.transform = 'none'; return; }
+  const s = Math.min(innerWidth / W, innerHeight / H);
+  stage.style.transform = `translate(${(innerWidth - W * s) / 2}px,${(innerHeight - H * s) / 2}px) scale(${s})`;
+}
+addEventListener('resize', fit); fit();
+if (!RENDER_MODE) {
+  let playing = !params.has('t'), base = parseFloat(params.get('t') || 0), t0 = performance.now(), cur = base;
+  const tick = () => { if (playing) { cur = K.wrap(base + (performance.now() - t0) / 1000, D); window.seek(cur); } requestAnimationFrame(tick); };
+  addEventListener('keydown', e => {
+    if (e.code === 'Space') { playing = !playing; base = cur; t0 = performance.now(); }
+    if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === 'f' || e.key === 'F')) location.search = K.formatSearch(K.nextFormat());
+  });
+  window.ready.then(() => { window.seek(base); tick(); });
+}
+</script>
+</body>
+</html>
