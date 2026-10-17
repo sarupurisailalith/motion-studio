@@ -206,5 +206,310 @@ window.K = (() => {
   Object.assign(K, { loadClip, clipFrame, drawClip });
   Object.assign(K, { FORMATS, init, pick, nextFormat, formatSearch, FORMAT: null, safe: null });
 
+  // =======================================================================
+  // ---- spring presets (E7.2): numbers from references/craft.md ----
+  // Each preset is callable, K.SPRING.ui(dt) -> 0..1, and carries {w, z, settle, overshoot}.
+  // settle = seconds until the step response stays within 2 % of the target.
+  //   snappy  w 38.8 z 1     settle 0.15 s  no overshoot     presses, toggles, small UI
+  //   ui      w 16.9 z 0.72  settle 0.35 s  3.8 % overshoot  shapes, cards ("shape" in craft.md)
+  //   soft    w 11.7 z 1     settle 0.50 s  no overshoot     big panels, gentle arrivals
+  //   camera  w 9.7  z 1     settle 0.60 s  no overshoot     camera; settles slower than the shape
+  // K.spring(dt, K.SPRING.ui) and K.springTrack(keys, t, K.SPRING.camera) take a preset in place of (w, z).
+  // =======================================================================
+  const preset = (w, z, settle, overshoot) =>
+    Object.freeze(Object.assign(dt => spring(dt, w, z), { w, z, settle, overshoot }));
+  const SPRING = Object.freeze({
+    snappy: preset(38.8, 1, 0.15, 0),
+    ui: preset(16.9, 0.72, 0.35, 0.038),
+    soft: preset(11.7, 1, 0.5, 0),
+    camera: preset(9.7, 1, 0.6, 0),
+  });
+  const isPreset = p => typeof p === 'function' && typeof p.w === 'number';
+  K.spring = (dt, w, z) => isPreset(w) ? spring(dt, w.w, w.z) : spring(dt, w, z);
+  K.springTrack = (keys, t, w, z) => isPreset(w) ? springTrack(keys, t, w.w, w.z) : springTrack(keys, t, w, z);
+  // Impacts, used sparingly (one element, one moment; bouncy easing is on the default banned list).
+  // wobble: a decaying sine around 0 (add it to a rotation or offset); amp in your units.
+  function wobble(dt, { amp = 1, freq = 5, decay = 9 } = {}) {
+    return dt <= 0 ? 0 : amp * Math.exp(-decay * dt) * Math.sin(2 * Math.PI * freq * dt);
+  }
+  // squash: volume-preserving scale pair for a landing at dt = 0 -> {sx, sy}, sx * sy = 1.
+  // amount 0.12 = 12 % wider at the peak; it settles like an under-damped spring (w, z).
+  function squash(dt, { amount = 0.12, w = 30, z = 0.45 } = {}) {
+    if (dt <= 0) return { sx: 1, sy: 1 };
+    const wd = w * Math.sqrt(1 - z * z);
+    const k = 1 + amount * Math.exp(-z * w * dt) * Math.cos(wd * dt);
+    return { sx: k, sy: 1 / k };
+  }
+  Object.assign(K, { SPRING, wobble, squash });
+
+  // =======================================================================
+  // ---- image helpers (E3.4): K.cover / K.crop, CSS-built device frames ----
+  // Supplied assets are used as-is: these only scale, crop, mask and move, never recolour.
+  // target = a CanvasRenderingContext2D (box in canvas px) or a DOM element (the viewport: the
+  // <img> goes inside it; box in the element's own px, default its full size).
+  // opts: fx, fy = focal point 0..1 kept in view (default .5), zoom >= 1, radius (px or
+  // [tl, tr, br, bl]), fit 'cover' (default) or 'contain' (letterbox, never crops: logos).
+  // =======================================================================
+  const natW = img => img.naturalWidth || img.videoWidth || img.width;
+  const natH = img => img.naturalHeight || img.videoHeight || img.height;
+  // Pure geometry for a source region crop {x,y,w,h} (image px) in a box -> {s, dest, view, src}:
+  // dest = where the scaled crop lands, view = dest ∩ box (what shows), src = image px shown in view.
+  function fitRect(crop, box, o = {}) {
+    const zoom = Math.max(1, o.zoom ?? 1), fx = clamp(o.fx ?? .5), fy = clamp(o.fy ?? .5);
+    const s = (o.fit === 'contain' ? Math.min(box.w / crop.w, box.h / crop.h)
+                                   : Math.max(box.w / crop.w, box.h / crop.h)) * zoom;
+    const dw = crop.w * s, dh = crop.h * s;
+    // keep the focal point centred, but never expose an edge (cover) or crop (contain)
+    const ox = dw >= box.w ? clamp(box.w / 2 - fx * dw, box.w - dw, 0) : (box.w - dw) * fx;
+    const oy = dh >= box.h ? clamp(box.h / 2 - fy * dh, box.h - dh, 0) : (box.h - dh) * fy;
+    const dest = { x: box.x + ox, y: box.y + oy, w: dw, h: dh };
+    const x0 = Math.max(box.x, dest.x), y0 = Math.max(box.y, dest.y);
+    const x1 = Math.min(box.x + box.w, dest.x + dw), y1 = Math.min(box.y + box.h, dest.y + dh);
+    const view = { x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) };
+    const src = { x: crop.x + (x0 - dest.x) / s, y: crop.y + (y0 - dest.y) / s, w: view.w / s, h: view.h / s };
+    return { s, dest, view, src };
+  }
+  const isCtx = t => !!t && typeof t.drawImage === 'function';
+  function placeImage(target, img, c0, box, o = {}) {
+    const iw = natW(img), ih = natH(img);
+    if (!iw || !ih) throw new Error('K.cover/K.crop: image not loaded — await img.decode() inside window.ready');
+    const c = c0 || { x: 0, y: 0, w: iw, h: ih };
+    if (isCtx(target)) {
+      if (!box) throw new Error('K.cover(ctx, img, box): a canvas needs a box {x, y, w, h}');
+      const g = fitRect(c, box, o);
+      if (g.view.w <= 0 || g.view.h <= 0) return g;
+      target.save();
+      if (o.radius) { target.beginPath(); target.roundRect(g.view.x, g.view.y, g.view.w, g.view.h, o.radius); target.clip(); }
+      target.drawImage(img, g.src.x, g.src.y, g.src.w, g.src.h, g.view.x, g.view.y, g.view.w, g.view.h);
+      target.restore();
+      return g;
+    }
+    const el = target, b = box || { x: 0, y: 0, w: el.clientWidth, h: el.clientHeight };
+    const g = fitRect(c, b, o);
+    el.style.overflow = 'hidden';
+    if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
+    if (o.radius != null) el.style.borderRadius = [].concat(o.radius).map(r => r + 'px').join(' ');
+    if (img.parentNode !== el) el.appendChild(img);
+    // the whole image, sized with width/height (not transform: scale), offset so the crop lands on dest
+    Object.assign(img.style, { position: 'absolute', maxWidth: 'none', display: 'block',
+      left: (g.dest.x - c.x * g.s) + 'px', top: (g.dest.y - c.y * g.s) + 'px',
+      width: iw * g.s + 'px', height: ih * g.s + 'px' });
+    return g;
+  }
+  // K.cover(target, img, box?, opts?)   K.crop(target, img, crop {x,y,w,h} in image px, box?, opts?)
+  const cover = (target, img, box, o) => placeImage(target, img, null, box, o);
+  const crop = (target, img, c, box, o) => placeImage(target, img, c, box, o);
+
+  // Device frames from geometry, no images. box = the outer frame {x, y, w, h}.
+  // -> {kind, frame, screen {x,y,w,h,r}, bar/dots/pill (browser) | island (phone)}; DOM and Canvas share it.
+  function deviceGeom(kind, box) {
+    const { x, y, w, h } = box;
+    if (kind === 'browser') {
+      const bar = Math.round(clamp(w * 0.04, 22, 64)), r = Math.round(bar * 0.4), dr = bar * 0.15;
+      const dots = [0, 1, 2].map(i => ({ x: x + bar * 0.6 + i * bar * 0.5, y: y + bar / 2, r: dr }));
+      const pw = w * 0.42, ph = bar * 0.56;
+      return { kind, frame: { x, y, w, h, r }, bar: { x, y, w, h: bar }, dots,
+               pill: { x: x + (w - pw) / 2, y: y + (bar - ph) / 2, w: pw, h: ph, r: ph / 2 },
+               screen: { x, y: y + bar, w, h: h - bar, r: [0, 0, r, r] } };
+    }
+    if (kind === 'phone') {
+      const bz = Math.round(w * 0.035), r = Math.round(w * 0.15), iw = w * 0.28, ih = w * 0.075;
+      return { kind, frame: { x, y, w, h, r },
+               screen: { x: x + bz, y: y + bz, w: w - 2 * bz, h: h - 2 * bz, r: r - bz },
+               island: { x: x + (w - iw) / 2, y: y + bz + w * 0.03, w: iw, h: ih, r: ih / 2 } };
+    }
+    throw new Error(`K.device: unknown kind "${kind}" (use browser or phone)`);
+  }
+  // Neutral chrome on purpose (no platform branding); override with opts.colors / opts.dots.
+  const DEVICE_THEME = {
+    light: { body: '#e8e6e1', edge: '#d2cfc8', pill: '#f7f6f3', text: '#77736b', dots: ['#c9c5bd', '#c9c5bd', '#c9c5bd'], phone: '#16161a', island: '#000' },
+    dark:  { body: '#1e1e22', edge: '#2e2e34', pill: '#2b2b30', text: '#9a9aa3', dots: ['#45454c', '#45454c', '#45454c'], phone: '#0b0b0d', island: '#000' },
+  };
+  const devTheme = o => Object.assign({}, DEVICE_THEME[o.theme || 'light'], o.colors || {}, o.dots ? { dots: o.dots } : {});
+  const radii = r => [].concat(r).map(v => v + 'px').join(' ');
+  // DOM: K.device('browser'|'phone', {w, h, theme, url, dots, colors, shadow, screenBg}) -> {el, screen, geom}.
+  // Build once (in layout()), move dev.el with transforms, fill it with K.cover(dev.screen, img, null, opts).
+  function device(kind, o = {}) {
+    const w = o.w ?? (kind === 'phone' ? 390 : 1280), h = o.h ?? (kind === 'phone' ? 844 : 800);
+    const g = deviceGeom(kind, { x: 0, y: 0, w, h }), c = devTheme(o);
+    const div = (r, css = {}) => {
+      const d = document.createElement('div');
+      Object.assign(d.style, { position: 'absolute', left: r.x + 'px', top: r.y + 'px', width: r.w + 'px',
+        height: r.h + 'px', borderRadius: r.r != null ? radii(r.r) : '' }, css);
+      return d;
+    };
+    const ring = kind === 'phone' ? Math.max(1, Math.round(w * 0.006)) : 1;
+    const el = div(g.frame, { background: kind === 'phone' ? c.phone : c.body,
+      boxShadow: [`inset 0 0 0 ${ring}px ${c.edge}`, o.shadow ? '0 30px 80px rgba(0,0,0,.28)' : ''].filter(Boolean).join(',') });
+    el.className = `k-device k-device-${kind}`;
+    const screen = div(g.screen, { overflow: 'hidden', background: o.screenBg || '#fff' });
+    screen.className = 'k-device-screen';
+    if (kind === 'browser') {
+      g.dots.forEach((d, i) => el.appendChild(div({ x: d.x - d.r, y: d.y - d.r, w: 2 * d.r, h: 2 * d.r, r: d.r }, { background: c.dots[i] })));
+      const pill = div(g.pill, { background: c.pill, color: c.text, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden',
+        font: `500 ${Math.round(g.pill.h * 0.5)}px/${g.pill.h}px system-ui,sans-serif` });
+      pill.textContent = o.url || '';
+      el.appendChild(pill);
+    }
+    el.appendChild(screen);
+    if (kind === 'phone') el.appendChild(div(g.island, { background: c.island }));
+    return { el, screen, geom: g };
+  }
+  // Canvas: K.drawDevice(ctx, kind, box, opts, drawScreen) draws the frame, calls drawScreen(screenRect)
+  // clipped to the screen (e.g. s => K.cover(ctx, img, s)), then the island on top. -> geometry.
+  function drawDevice(ctx, kind, box, o = {}, drawScreen) {
+    const g = deviceGeom(kind, box), c = devTheme(o);
+    const rr = (r, fill) => { ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, r.r ?? 0); if (fill) { ctx.fillStyle = fill; ctx.fill(); } };
+    ctx.save();
+    if (o.shadow) { ctx.shadowColor = 'rgba(0,0,0,.28)'; ctx.shadowBlur = 80; ctx.shadowOffsetY = 30; }
+    rr(g.frame, kind === 'phone' ? c.phone : c.body);
+    ctx.restore();
+    ctx.save();   // inner edge ring, like the DOM inset shadow: stroke 2x wide, clipped to the frame
+    ctx.strokeStyle = c.edge; ctx.lineWidth = 2 * (kind === 'phone' ? Math.max(1, Math.round(box.w * 0.006)) : 1);
+    rr(g.frame); ctx.clip(); ctx.stroke();
+    ctx.restore();
+    if (kind === 'browser') {
+      g.dots.forEach((d, i) => { ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2); ctx.fillStyle = c.dots[i]; ctx.fill(); });
+      rr(g.pill, c.pill);
+      if (o.url) {
+        ctx.save(); ctx.fillStyle = c.text; ctx.font = `500 ${Math.round(g.pill.h * 0.5)}px system-ui,sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(o.url, g.pill.x + g.pill.w / 2, g.pill.y + g.pill.h / 2, g.pill.w * 0.9); ctx.restore();
+      }
+    }
+    ctx.save(); rr(g.screen, o.screenBg || '#fff'); ctx.clip();
+    if (drawScreen) drawScreen(g.screen);
+    ctx.restore();
+    if (kind === 'phone') rr(g.island, c.island);
+    return g;
+  }
+  Object.assign(K, { fitRect, cover, crop, deviceGeom, device, drawDevice });
+
+  // =======================================================================
+  // ---- typography (E7.3): glyph layout, fitText, mask reveals, typing, scramble ----
+  // Tracking is in 1/1000 em (display -40..-80, mono +20; craft.md). DOM and Canvas variants.
+  // Measure only after fonts load (in window.ready / layout()); animate from t in seek().
+  // =======================================================================
+  const SEG = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null;
+  const graphemes = s => SEG ? [...SEG.segment(String(s))].map(x => x.segment) : [...String(s)];
+  // DOM: fill el with one inline-block span per glyph -> [span]. Spaces keep their width.
+  function glyphs(el, text, { tracking = 0, className = 'k-glyph' } = {}) {
+    el.textContent = '';
+    el.style.letterSpacing = tracking / 1000 + 'em';
+    el.style.whiteSpace = 'pre';
+    return graphemes(text).map(ch => {
+      const s = document.createElement('span');
+      s.className = className; s.textContent = ch; s.style.display = 'inline-block';
+      el.appendChild(s);
+      return s;
+    });
+  }
+  const pxOf = font => { const m = /(\d+(?:\.\d+)?)px/.exec(font); return m ? parseFloat(m[1]) : 10; };
+  // Canvas: lay out text in ctx's current font -> {glyphs:[{ch, x, w}], width, ascent, descent, offset}.
+  // x keeps kerning (prefix widths) plus tracking; align left | center | right shifts every x.
+  function layoutText(ctx, text, { tracking = 0, align = 'left' } = {}) {
+    const chars = graphemes(text), tr = tracking / 1000 * pxOf(ctx.font), m = ctx.measureText(text);
+    const width = m.width + tr * Math.max(0, chars.length - 1);
+    const offset = align === 'center' ? -width / 2 : align === 'right' ? -width : 0;
+    let prefix = '';
+    const gl = chars.map((ch, i) => {
+      const x = ctx.measureText(prefix).width + i * tr + offset;
+      prefix += ch;
+      return { ch, x, w: ctx.measureText(ch).width };
+    });
+    return { glyphs: gl, width, offset, ascent: m.fontBoundingBoxAscent ?? pxOf(ctx.font) * .8,
+             descent: m.fontBoundingBoxDescent ?? pxOf(ctx.font) * .2 };
+  }
+  // Canvas: draw a layout at baseline (x, y). fn(g, i) -> {dx, dy, alpha, ch} or null (skip the glyph).
+  // mask: true clips to the line box, for rises through a mask line.
+  function drawGlyphs(ctx, lay, x, y, fn, { mask = false } = {}) {
+    ctx.save();
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    if (mask) { ctx.beginPath(); ctx.rect(x + lay.offset - 4, y - lay.ascent, lay.width + 8, lay.ascent + lay.descent); ctx.clip(); }
+    const a0 = ctx.globalAlpha;
+    lay.glyphs.forEach((g, i) => {
+      const f = fn ? fn(g, i) : {};
+      if (!f) return;
+      ctx.globalAlpha = a0 * (f.alpha ?? 1);
+      if (ctx.globalAlpha > 0) ctx.fillText(f.ch ?? g.ch, x + g.x + (f.dx || 0), y + (f.dy || 0));
+    });
+    ctx.restore();   // restores globalAlpha too
+  }
+  // Largest font size (0.5 px steps) whose text fits maxWidth, clamped to [min, max]. -> px
+  //   DOM:    K.fitText(el, maxWidth, {min, max})                   sets el.style.fontSize
+  //   Canvas: K.fitText(ctx, maxWidth, {text, tracking, min, max})  sets the px size in ctx.font
+  function fitText(target, maxW, { text, tracking = 0, min = 8, max = 1000 } = {}) {
+    let widthAt, done = () => {};
+    if (isCtx(target)) {
+      if (text == null) throw new Error('K.fitText(ctx, maxWidth, {text}): a canvas needs the text');
+      const ctx = target, setPx = px => { ctx.font = ctx.font.replace(/(\d+(?:\.\d+)?)px/, px + 'px'); };
+      widthAt = px => { setPx(px); return layoutText(ctx, text, { tracking }).width; };
+    } else {
+      const el = target, w0 = el.style.width;
+      el.style.width = 'max-content';
+      widthAt = px => { el.style.fontSize = px + 'px'; return el.scrollWidth; };
+      done = () => { el.style.width = w0; };
+    }
+    let px = clamp(Math.floor(200 * maxW / widthAt(100)) / 2, min, max);
+    while (px > min && widthAt(px) > maxW) px -= 0.5;
+    widthAt(px); done();
+    return px;
+  }
+  // Mask-line rise for glyph / word / line i -> {y, p, shown}, a pure function of t.
+  // o: at (s or '8b'), gap (stagger, .06), dur (.7), travel (px below the line, e.g. 1.3 x font size),
+  // ease (editorial bezier(.16,1,.3,1)); optional exit: out (time), outGap (.04), outDur (.45; leaves
+  // upward, faster than it came). shown = part of it is inside the mask (mask px, default travel / 1.3).
+  const RISE_EASE = bezier(.16, 1, .3, 1);
+  function rise(t, i, o = {}) {
+    const travel = o.travel ?? 100, mask = o.mask ?? travel / 1.3;
+    const p = (o.ease || RISE_EASE)(seg(stagger(t, o.at ?? 0, i, o.gap ?? 0.06), 0, o.dur ?? 0.7));
+    const q = o.out == null ? 0 : ease.inCubic(seg(stagger(t, o.out, i, o.outGap ?? 0.04), 0, o.outDur ?? 0.45));
+    const y = (1 - p) * travel - q * travel;
+    return { y, p: p * (1 - q), shown: Math.abs(y) < mask };
+  }
+  // DOM: rise() applied to spans (inside an overflow:hidden line) -> true if any glyph shows.
+  // Set the row's opacity from it (0 when fully masked) so the gates measure the real reading time.
+  function maskRise(spans, t, o) {
+    let shown = false;
+    spans.forEach((s, i) => { const r = rise(t, i, o); s.style.transform = `translateY(${r.y}px)`; if (r.shown) shown = true; });
+    return shown;
+  }
+  // Typing derived from t: keystrokes at a seeded, natural rhythm (cps chars/s; longer after spaces
+  // and punctuation) -> {text, n, done, caret, end}. Caret solid while typing, blinks (0.53 s) when idle.
+  const TYPE_CACHE = new Map();
+  function keyTimes(chars, cps, seed) {
+    const key = chars.join('') + '|' + cps + '|' + seed;
+    if (!TYPE_CACHE.has(key)) {
+      let acc = 0;
+      TYPE_CACHE.set(key, chars.map((ch, i) => {
+        const prev = chars[i - 1] || '';
+        acc += (0.55 + 0.9 * rand(seed, i)) * (/[.,!?;:]/.test(prev) ? 2.6 : prev === ' ' ? 1.5 : 1) / cps;
+        return acc;
+      }));
+    }
+    return TYPE_CACHE.get(key);
+  }
+  function typed(text, t, { at = 0, cps = 16, seed = 1 } = {}) {
+    const chars = graphemes(text), times = keyTimes(chars, cps, seed), a = sec(at), lt = t - a;
+    let n = 0;
+    while (n < times.length && times[n] <= lt + 1e-9) n++;
+    const idle = lt - (n > 0 ? times[n - 1] : 0);
+    const caret = (n > 0 && n < chars.length) || (n > 0 && idle < 0.5) || Math.floor(Math.abs(idle) / 0.53) % 2 === 0;
+    return { text: chars.slice(0, n).join(''), n, done: n === chars.length, caret, end: a + (times[times.length - 1] || 0) };
+  }
+  // Seeded scramble -> the string to show at t. Glyphs settle in a seeded Fisher-Yates order across
+  // [at, at + dur] (or all at once at `snap`, e.g. a beat '16b'); unsettled glyphs cycle through
+  // `chars` `rate` times per second. Spaces never scramble.
+  const SCRAMBLE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#%&*+=?';
+  function scramble(text, t, { at = 0, dur = 0.6, seed = 1, rate = 20, chars = SCRAMBLE, snap } = {}) {
+    const g = graphemes(text), idx = g.map((c, i) => i).filter(i => g[i].trim());
+    for (let i = idx.length - 1; i > 0; i--) { const j = Math.floor(rand(seed, i) * (i + 1)); [idx[i], idx[j]] = [idx[j], idx[i]]; }
+    const settle = new Array(g.length).fill(-Infinity), a = sec(at), m = idx.length || 1;
+    idx.forEach((gi, rank) => { settle[gi] = snap != null ? sec(snap) : a + dur * (rank + 1) / m; });
+    const tick = Math.floor(t * rate + 1e-6), pool = graphemes(chars);
+    return g.map((c, i) => t >= settle[i] ? c : pool[Math.floor(rand(seed + 7, i * 7919 + tick) * pool.length)]).join('');
+  }
+  Object.assign(K, { graphemes, glyphs, layoutText, drawGlyphs, fitText, rise, maskRise, typed, scramble });
+
   return K;
 })();

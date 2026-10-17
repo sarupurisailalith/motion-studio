@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Device frames — kit example</title>
+<!--
+  MOTION STUDIO — screenshot-in-device example (E3.4), DOM and Canvas side by side:
+    Canvas: K.drawDevice(ctx, 'browser', box, opts, s => K.cover(ctx, img, s, {fy, zoom}))  the page scrolls
+    DOM:    K.device('phone', {w, h}) once, then K.cover(dev.screen, img, null, {fy})       the phone slides in
+  Springs use K.SPRING presets. Supplied screenshots are used as-is (crop/scale/move only).
+  Set SHOT to your ingested screenshot, e.g. 'assets/images/home.png' (ingest.py). With SHOT = null a
+  plain labelled placeholder is drawn instead, so the example runs without assets.
+  Copy this file AND templates/kit.js into one folder; render.py device-demo.html --check-only
+-->
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden}
+  #stage{position:absolute;left:0;top:0;transform-origin:0 0;overflow:hidden;background:#e9e5dd}
+  #cv{position:absolute;left:0;top:0}
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="cv"></canvas></div>
+<script src="kit.js"></script>
+<script>
+const K = window.K;
+const SHOT = null;   // e.g. 'assets/images/home.png' — a real screenshot the user supplied
+window.MOTION = { width: 1920, height: 1080, fps: 30, duration: 6, loop: true, hits: [[0.3, 'browser-in', 'swoosh'], [1.6, 'phone-in', 'pop']] };
+K.init(window.MOTION);
+const { width: W, height: H, duration: D } = window.MOTION;
+const stage = document.getElementById('stage'), cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+stage.style.width = W + 'px'; stage.style.height = H + 'px'; cv.width = W; cv.height = H;
+
+// A labelled placeholder (a neutral grid, clearly not product UI) when no screenshot is set.
+function placeholder() {
+  const c = document.createElement('canvas'); c.width = 1440; c.height = 3000;
+  const g = c.getContext('2d');
+  g.fillStyle = '#fafaf8'; g.fillRect(0, 0, c.width, c.height);
+  for (let y = 0; y < c.height; y += 300) {
+    g.fillStyle = (y / 300) % 2 ? '#ecebe6' : '#f4f3ef'; g.fillRect(80, y + 40, c.width - 160, 220);
+    g.fillStyle = '#b9b5ac'; g.font = '600 56px system-ui,sans-serif';
+    g.fillText(`screenshot placeholder · ${y / 300 + 1}`, 140, y + 170);
+  }
+  return c;
+}
+const img = new Image();
+let phone, L;
+
+const portrait = K.FORMAT.isPortrait;
+function layout() {
+  const S = K.safe.title;
+  // browser box (canvas) and phone size (DOM), per format
+  L = portrait
+    ? { browser: { x: S.x, y: S.y + S.h * 0.08, w: S.w, h: S.h * 0.5 }, phone: { w: S.w * 0.46, h: S.w * 0.46 * 2.16 }, px: S.x + S.w * 0.5, py: S.y + S.h * 0.40 }
+    : { browser: { x: S.x, y: S.y + S.h * 0.04, w: S.w * 0.68, h: S.h * 0.9 }, phone: { w: S.h * 0.40, h: S.h * 0.40 * 2.16 }, px: S.x + S.w * 0.74, py: S.y + S.h * 0.04 };
+  phone = K.device('phone', { w: Math.round(L.phone.w), h: Math.round(L.phone.h), shadow: true });
+  stage.appendChild(phone.el);
+}
+
+function render(t) {
+  ctx.fillStyle = '#e9e5dd'; ctx.fillRect(0, 0, W, H);
+  // browser enters from below on the soft preset, leaves on snappy; the page scrolls (fy) on the camera preset
+  const inP = K.springTrack([[0, 0], [0.3, 1]], t, K.SPRING.soft) - K.springTrack([[0, 0], [5.0, 1]], t, K.SPRING.snappy);
+  const b = L.browser, by = b.y + (1 - inP) * (H - b.y + 40);
+  const fy = K.springTrack([[0, 0], [1.2, 0.45], [2.8, 1], [4.6, 0]], t, K.SPRING.camera);
+  if (inP > 0.001) K.drawDevice(ctx, 'browser', { x: b.x, y: by, w: b.w, h: b.h }, { url: 'your-product.example', shadow: true },
+    s => K.cover(ctx, img, s, { fy, zoom: 1 + 0.08 * K.SPRING.camera(t - 1.2) * (1 - K.SPRING.camera(t - 4.6)) }));
+  // phone (DOM) slides in on the ui preset (3.8 % overshoot), out on snappy
+  const pIn = K.springTrack([[0, 0], [1.6, 1]], t, K.SPRING.ui) - K.springTrack([[0, 0], [4.8, 1]], t, K.SPRING.snappy);
+  const px = L.px + (1 - pIn) * (W - L.px + 60);
+  phone.el.style.transform = `translate(${Math.round(px)}px,${Math.round(L.py)}px)`;
+  phone.el.style.opacity = pIn > 0.001 ? 1 : 0;
+  K.cover(phone.screen, img, null, { fy: K.clamp(fy * 1.1) });
+}
+
+const params = new URLSearchParams(location.search), RENDER_MODE = params.has('render');
+window.ready = (async () => {
+  img.src = SHOT || placeholder().toDataURL('image/png');
+  await img.decode();
+  if (document.fonts && document.fonts.ready) await document.fonts.ready;
+  layout();
+})();
+window.seek = async t => { await window.ready; render(t); };
+if (!RENDER_MODE) {   // minimal preview: plays in a loop, ?t=2 freezes, F cycles formats
+  const s = Math.min(innerWidth / W, innerHeight / H);
+  stage.style.transform = `translate(${(innerWidth - W * s) / 2}px,${(innerHeight - H * s) / 2}px) scale(${s})`;
+  const t0 = performance.now(), fixed = params.has('t') ? +params.get('t') : null;
+  const tick = () => { window.seek(fixed ?? K.wrap((performance.now() - t0) / 1000, D)); if (fixed == null) requestAnimationFrame(tick); };
+  window.ready.then(tick);
+  addEventListener('keydown', e => { if (e.key === 'f' || e.key === 'F') location.search = K.formatSearch(K.nextFormat()); });
+}
+</script>
+</body>
+</html>

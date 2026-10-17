@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kinetic type — kit example</title>
+<!--
+  MOTION STUDIO — kinetic-type example built only from kit calls (E7.3 typography, E7.2 springs):
+  K.glyphs + K.fitText + K.maskRise (headline through a mask line), K.scramble (seeded, settles
+  glyph by glyph), K.typed (keystrokes derived from t, idle-only caret blink), K.springTrack with
+  K.SPRING presets (underline). Copy this file AND templates/kit.js into one folder (it loads kit.js
+  from its own folder), then: render.py kinetic-type.html --check-only --format 16x9,9x16
+-->
+<style>
+  :root{ --bg:#f2efe9; --ink:#111; --accent:#ff4d1f; --muted:#6f6a61;
+         --display: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+         --mono: ui-monospace, Menlo, Consolas, monospace; }
+  html,body{margin:0;height:100%;background:#000;overflow:hidden}
+  #stage{position:absolute;left:0;top:0;transform-origin:0 0;overflow:hidden;background:var(--bg)}
+  .row{position:absolute;white-space:nowrap}
+  #code{font:600 44px/1 var(--mono);color:var(--muted)}
+  #mask{overflow:hidden}
+  #head{font-family:var(--display);font-weight:800;color:var(--ink);line-height:1}
+  #bar{background:var(--accent);height:14px;border-radius:7px}
+  #typed{font:500 40px/1 var(--mono);color:var(--ink)}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="code" class="row" data-safe data-text></div>
+  <div id="mask" class="row" data-safe><div id="head" data-text></div></div>
+  <div id="bar" class="row"></div>
+  <div id="typed" class="row" data-safe data-text></div>
+</div>
+<script src="kit.js"></script>
+<script>
+const K = window.K;
+window.MOTION = { width: 1080, height: 1080, fps: 60, duration: 6, loop: true,
+  hits: [[0.2, 'scramble', 'blip'], [0.6, 'headline', 'tick'], [1.6, 'typing', 'type-key']] };
+K.init(window.MOTION);
+const { width: W, height: H, duration: D } = window.MOTION;
+const $ = id => document.getElementById(id);
+const stage = $('stage'), code = $('code'), mask = $('mask'), head = $('head'), bar = $('bar'), typed = $('typed');
+const S = K.safe.ui, cx = S.x + S.w / 2;
+const HEAD = 'Make it move', CODE = 'DETERMINISTIC', TYPED = 'seek(t) → pixels';
+let spans, fontPx, barW;
+
+function layout() {
+  spans = K.glyphs(head, HEAD, { tracking: -50 });
+  fontPx = K.fitText(head, Math.round(S.w * 0.86), { max: 190 });
+  K.glyphs(code, CODE, { tracking: 20 });                       // measure the final word once
+  typed.textContent = TYPED + '▍';                              // and the full typed line
+  const codeW = code.offsetWidth, headW = head.offsetWidth, typedW = typed.offsetWidth;
+  const maskH = Math.round(fontPx * 1.12), gap = Math.round(fontPx * 0.28);
+  const total = 44 + gap + maskH + gap + 14 + gap + 40;
+  let y = Math.round(S.y + (S.h - total) / 2);
+  code.style.cssText = `left:${Math.round(cx - codeW / 2)}px;top:${y}px`; y += 44 + gap;
+  mask.style.cssText = `left:${Math.round(cx - headW / 2 - fontPx * .1)}px;top:${y}px;width:${Math.ceil(headW + fontPx * .2)}px;height:${maskH}px`;
+  head.style.paddingLeft = Math.round(fontPx * .1) + 'px'; y += maskH + gap;
+  barW = Math.round(headW * 0.6);
+  bar.style.cssText = `left:${Math.round(cx - barW / 2)}px;top:${y}px;width:${barW}px`; y += 14 + gap;
+  typed.style.cssText = `left:${Math.round(cx - typedW / 2)}px;top:${y}px`;
+}
+
+function render(t) {
+  // scramble: settles glyph by glyph in a seeded order, then leaves
+  code.textContent = K.scramble(CODE, t, { at: 0.2, dur: 0.8, seed: 4 });
+  code.style.opacity = K.seg(t, 0, 0.15) * (1 - K.seg(t, 4.9, 5.1));
+  // headline: glyphs rise through the mask line, leave upward
+  const shown = K.maskRise(spans, t, { at: 0.6, gap: 0.05, travel: Math.round(fontPx * 1.3), mask: fontPx * 1.12, out: 4.4 });
+  head.style.opacity = shown ? 1 : 0;
+  // underline: a small dot at frame 0 springs open (ui preset), snaps shut (snappy preset)
+  const k = K.clamp(K.springTrack([[0, 0], [0.9, 1]], t, K.SPRING.ui) - K.clamp(K.springTrack([[0, 0], [4.7, 1]], t, K.SPRING.snappy)), 0, 1.1);
+  const w = 14 + (barW - 14) * k;
+  bar.style.width = w + 'px'; bar.style.transform = `translateX(${(barW - w) / 2}px)`;
+  // typing from t; the caret blinks only when idle
+  const ty = K.typed(TYPED, t, { at: 1.6, cps: 14, seed: 2 });
+  typed.textContent = ty.text + (ty.caret ? '▍' : '');
+  typed.style.opacity = 1 - K.seg(t, 4.8, 5.1);
+}
+
+stage.style.width = W + 'px'; stage.style.height = H + 'px';
+const params = new URLSearchParams(location.search), RENDER_MODE = params.has('render');
+window.ready = (async () => { if (document.fonts && document.fonts.ready) await document.fonts.ready; layout(); })();
+window.seek = async t => { await window.ready; render(t); };
+if (!RENDER_MODE) {   // minimal preview: plays in a loop, ?t=2 freezes, F cycles formats
+  const s = Math.min(innerWidth / W, innerHeight / H);
+  stage.style.transform = `translate(${(innerWidth - W * s) / 2}px,${(innerHeight - H * s) / 2}px) scale(${s})`;
+  const t0 = performance.now(), fixed = params.has('t') ? +params.get('t') : null;
+  const tick = () => { window.seek(fixed ?? K.wrap((performance.now() - t0) / 1000, D)); if (fixed == null) requestAnimationFrame(tick); };
+  window.ready.then(tick);
+  addEventListener('keydown', e => { if (e.key === 'f' || e.key === 'F') location.search = K.formatSearch(K.nextFormat()); });
+}
+</script>
+</body>
+</html>
