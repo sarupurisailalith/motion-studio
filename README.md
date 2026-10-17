@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md"><img alt="version 0.2.2" src="https://img.shields.io/badge/version-0.2.2-FF4D1F?style=flat-square&labelColor=0E0F11"></a>
+  <a href="CHANGELOG.md"><img alt="version 0.3.0" src="https://img.shields.io/badge/version-0.3.0-FF4D1F?style=flat-square&labelColor=0E0F11"></a>
   <a href="LICENSE"><img alt="licence Apache-2.0" src="https://img.shields.io/badge/licence-Apache--2.0-6B6862?style=flat-square&labelColor=0E0F11"></a>
   <img alt="formats 16x9 9x16 1x1 4x5" src="https://img.shields.io/badge/formats-16x9%20·%209x16%20·%201x1%20·%204x5-6B6862?style=flat-square&labelColor=0E0F11">
   <img alt="audio −14 LUFS" src="https://img.shields.io/badge/audio-−14%20LUFS-6B6862?style=flat-square&labelColor=0E0F11">
@@ -21,8 +21,9 @@
 ---
 
 **Motion Studio** is a plugin for coding agents that makes motion graphics as code. Your agent
-writes the animation as an HTML/SVG/Canvas/GSAP/Three.js composition, then renders it
+writes the animation as an HTML/SVG/Canvas/GSAP/Three.js/Zdog/p5.js composition, then renders it
 frame-exact to MP4 in every format you ask for, with synced sound effects and an automated QA pass.
+It can also recut a clip of someone talking into a new edit, with graphics timed to their words.
 
 ```
 ❯ /motion 15s 9:16 launch teaser for my app
@@ -32,9 +33,10 @@ frame-exact to MP4 in every format you ask for, with synced sound effects and an
 same frame. That is what makes renders exact, repeatable and fixable with small edits.
 
 **No generative media models.** Motion Studio never calls an image, video or audio generation
-model. The agent writes code (HTML, SVG, Canvas, Three.js), headless Chromium renders that code
-frame by frame, ffmpeg encodes it, and sound effects are synthesized from math in `sfx.py`.
-Everything runs on your machine. See [What runs on your machine](#what-runs-on-your-machine).
+model. The agent writes code (HTML, SVG, Canvas, Three.js, Zdog, p5.js), headless Chromium renders
+that code frame by frame, ffmpeg encodes it, and sound effects are synthesized from math in `sfx.py`
+(or placed from takes you supply). The one optional model is faster-whisper speech-to-text for
+word timings in footage pieces, which runs locally if you install it. Everything runs on your machine. See [What runs on your machine](#what-runs-on-your-machine).
 
 ## The film
 
@@ -73,6 +75,21 @@ Scored critic rounds run on request.
 One timeline serves every format. Only the layout changes, and 9:16 keeps text clear of the
 Reels/TikTok buttons and captions.
 
+### Renderers
+
+The brief's `<renderer>` picks the template; all of them share the same contract and gates.
+
+| Renderer | Best for |
+|---|---|
+| `2d` | DOM/SVG/Canvas: type, UI, explainers, most motion graphics |
+| `gsap` | One paused GSAP master timeline |
+| `glsl` | Fragment-shader loops |
+| `three` | Product realism, lighting, perspective (Three.js) |
+| `zdog` | Characters, mascots, icons and props in flat-round 3D, with a rig, clips and a catalog of 17 original models |
+| `p5` | Generative loops, flow fields, glyph-driven type (p5.js) |
+| `layered` | Several engines on one timeline, one per depth plane |
+| `footage` | A talking clip recut with graphics: transcript and word timings, a suggested edit list, captions, lower thirds, stat cards and speaker layouts timed to the words, lip sync checked at every cut |
+
 ## Install
 
 **Requirements**
@@ -81,8 +98,11 @@ Reels/TikTok buttons and captions.
 pip install playwright numpy pillow
 python3 -m playwright install chromium
 # ffmpeg on PATH (brew install ffmpeg / apt install ffmpeg / winget install ffmpeg)
-# npm, only if you vendor three.js or GSAP
+# npm, only if you vendor three.js, GSAP, Zdog or p5.js
 # optional: pip install librosa (beats.py uses it for tempo if present; a numpy fallback is built in)
+# optional: pip install faster-whisper (word timings for footage pieces; downloads its model on first use)
+# optional: pip install pypdf (brand.py reads a PDF brand guide; pdftotext also works)
+# python3 skills/motion-video/scripts/doctor.py checks all of this and prints what's missing
 ```
 
 **Claude Code**
@@ -264,11 +284,15 @@ keeping the look identical.
 | Flag | What it does |
 |---|---|
 | `--format 16x9,9x16,1x1,4x5` | One file per format |
-| `--deliver` | Adds a poster and contact sheet per format and `renders/deliver.json` |
+| `--deliver` | Adds a poster, contact sheet and phone-size sheet per format and `renders/deliver.json` |
 | `--subframes N` | Motion blur |
 | `--audio file` | Muxed and normalised to −14 LUFS |
 | `--gl` | WebGL / Three.js |
 | `--scale 2` | Supersampled, crisper type |
+| `--workers N` | Parallel render (default: the CPU count, max 6) |
+| `--thorough` | Denser determinism and contrast sampling before a hero render |
+| `--no-cache` | Always render (by default a rerun with unchanged page files and flags reuses the cached video and only re-muxes audio) |
+| `--capture screenshot` | The v0.2 capture path (default: faster CDP / canvas capture, same pixels) |
 </details>
 
 ## QA gates
@@ -281,7 +305,7 @@ keeping the look identical.
 `render.py` checks determinism, the loop seam, safe areas, text duration and text contrast
 (≥ 4.5:1 against what's rendered behind the words) before the full render. `check.py` checks the
 MP4 for blank frames, single-frame pops, frozen stretches, the loop seam and loudness, and with
-`--against` compares its pacing with a reference you supplied (`reference.py`). `sync.py` measures where each SFX lands against its hit. Any FAIL blocks delivery.
+`--against` compares its pacing with a reference you supplied (`reference.py`). `sync.py` measures where each SFX lands against its hit. Footage pieces add `cue_timing` (each graphic within ±2 frames of its word), `claim_trace` (every on-screen claim is a quote or a line of your facts file) and `av_sync` (lip sync within 1 frame at every cut). Any FAIL blocks delivery.
 
 ## Previewing a composition
 
@@ -305,7 +329,10 @@ servers; it only runs the scripts below, when the agent or you invoke them.
 | `ingest.py` | Copies your asset files into `motion/<slug>/assets/`, sanitising SVGs and converting clips with ffmpeg | None |
 | `brand.py` | Reads the ingested logo, screenshots, fonts and brand guide; writes `brand.json` and a swatch image | None |
 | `scaffold.py`, `doctor.py` | Create a project folder from a template; check dependencies and print install commands (installs nothing) | None |
-| `vendor.py` | Copies three.js, GSAP or lottie into `vendor/` so renders stay offline | Downloads exact pinned versions (`three@0.186.1`, `gsap@3.15.0`, `lottie-web@5.13.0`) from the npm registry |
+| `catalog.py` | Searches the bundled Zdog model catalog and copies models into a project | None |
+| `cut.py`, `story.py` | Build the edit list and voice stem from your clip; check graphics cues and claims against the transcript and your facts file | None |
+| `transcribe.py` | Word timings for a clip's audio: faster-whisper if you installed it, otherwise aligns a script you supply | None, except faster-whisper's one-time model download from Hugging Face (only if installed). Audio is never uploaded |
+| `vendor.py` | Copies three.js, GSAP, lottie, Zdog or p5.js into `vendor/` so renders stay offline | Downloads exact pinned versions (`three@0.186.1`, `gsap@3.15.0`, `lottie-web@5.13.0`, `zdog@1.1.3` + `zfont@1.2.8`, `p5@2.3.4`) from the npm registry |
 | Setup (you run it once) | `pip install …` and `python3 -m playwright install chromium` | PyPI and Playwright's Chromium download host |
 
 Files are read only when you name or attach them, and everything the plugin writes goes under
@@ -320,6 +347,8 @@ Files are read only when you name or attach them, and everything the plugin writ
 | `ffmpeg` / `ffprobe` not found | Install ffmpeg and make sure it's on `PATH` (`ffmpeg -version`) |
 | Three.js piece renders black or fails to load modules | Run `vendor.py <project> three`, render with `--gl`, and preview over `http.server`, not `file://` |
 | `vendor.py` fails | Needs `npm` and network access to the npm registry; retry or copy the files into `vendor/` by hand |
+| `transcribe.py` says "install faster-whisper to enable word timings" | `pip install faster-whisper`, or pass the script with `--script` so it can align it to the audio |
+| Not sure what's missing | `python3 skills/motion-video/scripts/doctor.py` lists every missing piece with its install command |
 | A QA gate FAILs (determinism, blank frame, pop, loop seam) | The report names the frame and time; fix that beat and re-render. [`gotchas.md`](skills/motion-video/references/gotchas.md) lists the usual causes |
 | SFX land off the hit | Run `sync.py` and adjust `MOTION.hits`; the gate is ±20 ms |
 | `/motion` not found | Use the namespaced `/motion-studio:motion`, or check `claude plugin list` shows the plugin enabled |
@@ -338,24 +367,26 @@ Motion Studio collects no data. See [PRIVACY.md](PRIVACY.md). To report a vulner
 
 | Path | What it does |
 |---|---|
-| `skills/motion-video/` | The workflow skill: brief template, genre playbooks, craft numbers, production notes, engine gotchas, formats, audio and assets references, two starter templates, and the scripts below. |
-| `skills/motion-video/templates/` | `composition.html` (2D), `three-composition.html` (Three.js), `gsap-composition.html` (GSAP paused timeline) and `glsl-composition.html` (fragment shader), all built on `kit.js`: the shared motion kit (springs and presets, keyframes, seeded noise, formats and safe areas, beat timing, hits, video clips, image cover/crop and device frames, typography). `examples/` shows the type kit and device frames. Copy the template **and** `kit.js` (or run `scaffold.py`). |
+| `skills/motion-video/` | The workflow skill: brief template, genre playbooks, craft numbers, production notes, engine gotchas, formats, audio, assets, footage, Zdog and style-guide references, the templates, the model catalog, and the scripts below. |
+| `skills/motion-video/templates/` | `composition.html` (2D), `three-composition.html` (Three.js), `gsap-composition.html` (GSAP paused timeline), `glsl-composition.html` (fragment shader), `zdog-composition.html`, `p5-composition.html`, `layered-composition.html` and `footage-composition.html`, all built on `kit.js`: the shared motion kit (springs and presets, keyframes, seeded noise, formats and safe areas, beat timing, hits, video clips, image cover/crop and device frames, typography). Add-on kits: `kit-zdog.js` (`K.Z`, rig and clips), `kit-p5.js`, `kit-layers.js`, `kit-footage.js`. `examples/` shows the type kit and device frames; `recipes/` has tested engine recipes. Copy the template **and** `kit.js` (or run `scaffold.py`). |
 | `skills/motion-video/scripts/render.py` | Headless-Chromium renderer: seeks every frame via `window.seek(t)`, sub-frame motion blur, parallel workers, fast CDP / canvas capture (same pixels), a render cache for audio-only reruns, `--format`, `--deliver` bundle, review renders (`--sheet --phone --strip --poster --contact beats`), `--hits`, and the gates: determinism, loop seam, safe area, text duration, text contrast. |
 | `skills/motion-video/scripts/check.py` | QA on the MP4: blank frames, single-frame pops, frozen stretches, loop seam, loudness, `--sync`, `--against` (pacing vs. a reference), contact sheet. |
 | `skills/motion-video/scripts/reference.py` | Studies a local reference video or stills: hard cuts, one frame per shot, a 1 fps sheet and motion stats in `cuts.json`. Never downloads. |
 | `skills/motion-video/scripts/beats.py` | Beat grid from your track (BPM, downbeats, sections; cuts the best window) or a fixed `--grid`. Writes `beats.js` for the kit. |
-| `skills/motion-video/scripts/sfx.py` | Synthesized SFX palette (whoosh, tick, thud, riser, impact …) placed sample-accurately on `MOTION.hits`. |
+| `skills/motion-video/scripts/sfx.py` | Synthesized SFX palette (whoosh, tick, thud, riser, impact, scrape, chime, loopable crackle and sizzle beds …) placed sample-accurately on `MOTION.hits`; project palettes with `--palette`, your own takes with `--samples`. |
 | `skills/motion-video/scripts/mix.py` | Mixes music, SFX and voice-over, ducks music under VO, masters to −14 LUFS / −1 dBTP, muxes into every format. |
 | `skills/motion-video/scripts/sync.py` | Measures where each SFX lands vs. its hit (±20 ms gate) and plots it. |
-| `skills/motion-video/scripts/ingest.py` | Copies and normalises your logo, screenshots, fonts, clips (→ frame sequences), audio and docs into `assets/` with an inventory. |
-| `skills/motion-video/scripts/vendor.py` | Copies three.js / GSAP / lottie locally so renders never hit the network. |
+| `skills/motion-video/scripts/ingest.py` | Copies and normalises your logo, screenshots, fonts, clips (→ frame sequences plus their own audio), audio and docs into `assets/` with an inventory. |
+| `skills/motion-video/scripts/transcribe.py`, `cut.py`, `story.py` | Footage pieces: word timings, the edit list and voice stem (with optional cleanup), and the cue/claim checks. |
+| `skills/motion-video/scripts/vendor.py` | Copies three.js / GSAP / lottie / Zdog / p5.js locally (with their licence files) so renders never hit the network. |
+| `skills/motion-video/scripts/catalog.py`, `catalog/` | 17 original Zdog models (characters, props, scenery, icons) with previews; search, use, turntable. |
 | `skills/motion-video/scripts/brand.py` | `brand.json` from your local brand files: ranked palette, display/UI fonts, wordmark, guide colours and copy, plus a swatch for the brand confirmation step. |
-| `skills/motion-video/scripts/scaffold.py` | New project folder from a template (`2d`, `three`, `gsap`, `glsl`) with `kit.js` and a brief skeleton. |
+| `skills/motion-video/scripts/scaffold.py` | New project folder from a template (`2d`, `three`, `gsap`, `glsl`, `zdog`, `p5`, `layered`) with `kit.js`, its add-on kits and a brief skeleton. |
 | `skills/motion-video/scripts/doctor.py` | Checks Python packages, Chromium, ffmpeg and optional extras; prints the exact install commands. |
 | `commands/` | `/motion`, `/motion-inspire`, `/motion-brief`, `/motion-assets`, `/motion-audio`, `/motion-render`. |
 | `agents/motion-critic.md` | Fresh-eyes reviewer: scores 7 dimensions with evidence, top 3 timestamped fixes, a critique ledger, and a ship / one-more-pass verdict. |
 | `docs/` | Performance notes and the README images in `docs/assets/`. |
-| `PRIVACY.md`, `SECURITY.md` | Privacy policy and how to report a vulnerability. |
+| `PRIVACY.md`, `SECURITY.md`, `CREDITS.md` | Privacy policy, how to report a vulnerability, and credits. |
 
 </details>
 

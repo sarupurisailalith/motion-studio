@@ -1,7 +1,7 @@
 {
   "name": "motion-studio",
   "displayName": "Motion Studio",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Make motion-graphics videos with code: brief → storyboard → deterministic HTML/SVG/Canvas/Three.js composition → frame-exact headless render in every format → synced SFX and a −14 LUFS mix → automated QA → MP4s, with scored critic rounds on request.",
   "author": {
     "name": "Sailalith Sarupuri",

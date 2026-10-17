@@ -13,8 +13,8 @@ Per-hit opts: gain (dB), pan (-1..1), pitch (semitones), len (s), anchor, reverb
   loop (true: no fades, and a sound running past the end wraps to the start; for beds like
   crackle / sizzle with len = the loop length, so the seam is click-free).
 
-Project palettes: `--palette P/audio/palette.py` (auto-loaded from next to --out, or from
-P/audio/ for P/renders/<slug>_hits.json) is a Python file that adds recipes with
+Project palettes: `--palette P/audio/palette.py` (loaded only when passed; a palette.py found
+next to --out or in P/audio/ is reported, never run on its own) is a Python file that adds recipes with
   import sfx; sfx.register(name, fn, anchor, describe, transient=False)
 where fn(sr, rng, opts) -> (mono float array, onset_s, peak_s). transient=True sync-checks it.
 
@@ -588,17 +588,19 @@ def main():
     ap.add_argument("--sr", type=int, default=48000)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--palette", type=Path, help="project palette file that calls sfx.register "
-                    "(default: palette.py next to --out, or P/audio/palette.py for P/renders/*_hits.json)")
-    ap.add_argument("--no-palette", action="store_true", help="don't auto-load a project palette")
+                    "(loaded only when given)")
     ap.add_argument("--samples", type=Path, metavar="DIR",
                     help="place <name>_<n>.<ext> audio files from DIR instead of synthesising those names")
     ap.add_argument("--list", action="store_true", help="print the palette and exit")
     a = ap.parse_args()
 
     palette = a.palette
-    if palette is None and not a.no_palette and a.out and a.hits:
+    if palette is None and a.out and a.hits:
+        # never run project code implicitly: point at it and let the caller opt in
         cands = [a.out.parent / "palette.py", a.hits.resolve().parent.parent / "audio" / "palette.py"]
-        palette = next((c for c in cands if c.is_file()), None)
+        found = next((c for c in cands if c.is_file()), None)
+        if found:
+            print(f"note: {found} not loaded; pass --palette {found} to use its sounds", file=sys.stderr)
     if palette is not None:
         load_palette(palette)
     if a.list:

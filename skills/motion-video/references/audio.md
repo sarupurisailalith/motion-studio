@@ -84,8 +84,8 @@ change `--seed` for a different take.
 start, so the track loops without a click. Keep a bed low (`gain: -12` or so) and put the hits on top.
 
 ### Project palettes (`P/audio/palette.py`)
-A sound the palette lacks: write it once for the project instead of forking `sfx.py`. `sfx.py` auto-loads
-`palette.py` next to `--out` (`P/audio/palette.py`; `--palette FILE` for another, `--no-palette` to skip it):
+A sound the palette lacks: write it once for the project instead of forking `sfx.py`, and pass it with
+`--palette P/audio/palette.py` (it is never loaded on its own; `sfx.py` only notes that it exists):
 ```python
 import numpy as np
 import sfx                                   # the running sfx.py: its helpers (_t, _fft_filter, _osc, ...) too

@@ -3,7 +3,7 @@
 All notable changes to Motion Studio. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/). Backlog ids (E…) refer to the project backlog.
 
-## [Unreleased] — v0.3
+## [0.3.0] — 2026-10-18
 
 Footage-led videos, two new engines (Zdog, p5.js), a brand kit, faster renders and more QA gates.
 Every v0.2 command line and composition works as before; no new network access at render time.
@@ -54,7 +54,7 @@ Every v0.2 command line and composition works as before; no new network access a
   install commands; installs nothing).
 - **Audio**: presets `scrape`, `whoomp`, `crackle`, `creak`, `splash`, `rustle`, `chime`, `zip`,
   `sizzle` (`crackle` / `sizzle` are seamless beds with `loop: true`); project palettes via
-  `sfx.register` in `P/audio/palette.py` or `--palette`; `sfx.py --samples DIR` places supplied
+  `sfx.register` in a palette file loaded with `--palette` (never run implicitly); `sfx.py --samples DIR` places supplied
   takes on the hits; `sfx_events.json` records `transient` and `source`.
 - **Reference analysis**: `reference.py` studies a local reference video or stills (cuts, shot
   lengths, motion stats; never downloads), `references/style_guide.md`, and `check.py --against`

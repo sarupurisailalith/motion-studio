@@ -21,8 +21,8 @@ the composition `P/<slug>.html`; `D` = `MOTION.duration`. Same paths as `/motion
    audio.md). Then `python3 $S/render.py P/<slug>.html --hits` → `P/renders/<slug>_hits.json`.
 4. **SFX.** `python3 $S/sfx.py P/renders/<slug>_hits.json --out P/audio/sfx.wav`
    (→ `P/audio/sfx.wav` + `P/audio/sfx_events.json`). Keep both files together. A sound the
-   palette lacks → register it in `P/audio/palette.py` (auto-loaded; audio.md "Project
-   palettes"). Takes supplied by the user or a connector → `--samples <folder>` with files named
+   palette lacks → register it in `P/audio/palette.py` and pass `--palette P/audio/palette.py`
+   (audio.md "Project palettes"; it is never loaded without the flag). Takes supplied by the user or a connector → `--samples <folder>` with files named
    `<name>_<n>.<ext>`.
 5. **Picture.** Every format must exist as `P/renders/<slug>_<fmt>.mp4` (or `<slug>.mp4`). If
    none exists, or the timing changed, render first:

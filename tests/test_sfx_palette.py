@@ -134,9 +134,18 @@ class ProjectPalette(unittest.TestCase):
                                                      hit(2.0, "land", "thud")], 3.0)
         return p
 
-    def test_autoload_and_transient(self):
+    def test_palette_is_opt_in(self):
+        # a palette.py in the project is reported, never run without --palette
         p = self.project()
         r = helpers.run_script("sfx.py", p / "renders" / "comp_hits.json", "--out", p / "audio" / "sfx.wav")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("not loaded; pass --palette", r.stderr)
+        self.assertIn("unknown sfx 'knock'", r.stderr)
+
+    def test_registered_transient(self):
+        p = self.project()
+        r = helpers.run_script("sfx.py", p / "renders" / "comp_hits.json", "--out", p / "audio" / "sfx.wav",
+                               "--palette", p / "audio" / "palette.py")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("knock", r.stderr)
         ev = {e["label"]: e for e in json.loads((p / "audio" / "sfx_events.json").read_text())["events"]}
@@ -155,7 +164,7 @@ class ProjectPalette(unittest.TestCase):
         rep = json.loads(helpers.run_script("sync.py", late, events, "--ref", p / "audio" / "sfx.wav").stdout)
         self.assertTrue([h for h in rep["hits"] if h["label"] == "rap"][0]["status"].startswith("FAIL"), rep)
 
-    def test_explicit_and_no_palette(self):
+    def test_explicit_palette(self):
         p = self.project()
         pal = p / "audio" / "palette.py"
         alt = p / "elsewhere.py"
