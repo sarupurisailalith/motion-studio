@@ -26,19 +26,22 @@
   }
   // Draw one frame. view = { zoom, cx, cy } in CSS px (cx, cy = where the scene origin lands);
   // dpr defaults to devicePixelRatio (the canvas backing store is W*dpr). background: a colour
-  // to fill first (else the canvas is cleared to transparent). The view is kept for K.Z.project.
+  // to fill first; clear: false draws over what is there (e.g. into p5's drawingContext between
+  // p5 calls). The context's own state (transform, styles) is saved and restored.
+  // The view is kept for K.Z.project.
   function render(scene, ctx, view = {}) {
     const dpr = view.dpr || window.devicePixelRatio || 1;
     const zoom = view.zoom ?? 1, cx = view.cx ?? 0, cy = view.cy ?? 0;
     canonicalSort(scene);
     scene.updateGraph();
+    ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (view.background) { ctx.fillStyle = view.background; ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height); }
-    else ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    else if (view.clear !== false) ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, dpr * cx, dpr * cy);
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     scene.renderGraphCanvas(ctx);
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.restore();
     scene._kzView = { zoom, cx, cy };
     return scene;
   }

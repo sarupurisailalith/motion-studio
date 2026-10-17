@@ -99,5 +99,34 @@ class LayersKit(Browser):
         self.assertEqual(r, ["10px", "20px", "30px", "40px", "1", True, True, "", "0.5", "0"])
 
 
+def spike_project(name, *engines):
+    d = tmpdir()
+    helpers.with_vendor(d, *engines)
+    for f in ("kit.js", "kit-p5.js", "kit-zdog.js"):
+        shutil.copy2(helpers.TEMPLATES / f, d / f)
+    (d / "models").mkdir()
+    shutil.copy2(CAT / "models" / "pip.js", d / "models" / "pip.js")
+    shutil.copy2(FIX / name, d / name)
+    return d / name
+
+
+@helpers.slow
+@helpers.needs_chromium
+@helpers.needs_ffmpeg
+class Spikes(unittest.TestCase):
+    """E10.15: engines sharing one canvas, and an engine canvas as a Three.js texture."""
+
+    def assert_passes(self, g):
+        self.assertEqual(g["determinism"], "pass", g)
+        self.assertTrue(g["loop_seam"].startswith("pass"), g)
+        self.assertEqual(g["page_errors"], "none", g)
+
+    def test_zdog_inside_p5_drawing_context(self):
+        self.assert_passes(gates(spike_project("spike_zdog_in_p5.html", "zdog", "p5"))["gates"])
+
+    def test_zdog_canvas_as_three_texture(self):
+        self.assert_passes(gates(spike_project("spike_canvas_texture.html", "zdog", "three"), "--gl")["gates"])
+
+
 if __name__ == "__main__":
     unittest.main()

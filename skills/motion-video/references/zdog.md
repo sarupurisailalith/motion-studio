@@ -35,7 +35,7 @@ Render without `--gl`: Zdog is Canvas 2D. About 2 s of CPU per second of 30 fps 
 
 | helper | what it does |
 |---|---|
-| `render(scene, ctx, {zoom, cx, cy, background})` | canonical sort, `updateGraph`, draw; keeps the view for `project` |
+| `render(scene, ctx, {zoom, cx, cy, background, clear})` | canonical sort, `updateGraph`, draw (`clear: false` draws over a shared canvas); keeps the view for `project` |
 | `project(anchor)` | screen `{x, y, z}` (CSS px) after the last render: pin DOM text, `K.proxy` boxes or hits to 3D points |
 | `camera(scene)` → `{world, set({yaw, pitch, target, level})}` | orbit camera; add the set to `world`; `pitch > 0` looks down |
 | `levelRoll(yaw, pitch)` | `−atan2(sin yaw·sin pitch, cos yaw)`: keeps a course along x level (`level: true`); leans verticals, so keep yaw small |
@@ -103,6 +103,19 @@ palette slots, supported clips and a preview still `catalog/<id>.png`.
   `K.Z.layer` bias, and swing the camera only ±0.5 rad so the layers read as depth.
 - **Camera vocabulary:** orbit-track (yaw follows the action, small pitch) plus `zoom`. There is
   no dolly or perspective: depth reads only through rotation and overlap.
+
+## Mixing engines
+
+- **Separate canvases** (the usual way): `K.layers` in `templates/layered-composition.html`, one
+  engine per depth plane.
+- **One shared 2D canvas** (validated): inside a p5 `draw`, call
+  `K.Z.render(scene, p.drawingContext, { zoom, cx, cy, clear: false })` between p5 calls, e.g.
+  p5 sky → Zdog character → p5 mist in front. K.Z.render saves and restores the context, so p5's
+  own transform survives. Use it when an atmosphere layer must pass in front of the character.
+- **Zdog (or p5) canvas as a Three.js texture** (validated with `--gl`): draw the Zdog scene to an
+  offscreen canvas (`dpr: 1`, power-of-two size) inside `seek(t)`, set `texture.needsUpdate = true`,
+  then `renderer.render`. Good for a character on a 3D screen or a sign in a Three scene.
+- Both pass determinism and the loop seam (`tests/fixtures/engines/spike_*.html`).
 
 ## Limits and gotchas
 
