@@ -97,7 +97,7 @@ def run(name, kind, args, sub, root):
 
 def table(rows, info):
     today = datetime.date.today().isoformat()
-    L = [f"# Performance baseline (E0.3)", "",
+    L = ["# Performance baseline (E0.3)", "",
          f"Measured {today} with `python3 tests/bench.py`. Wall time includes Chromium start-up, page load,",
          "the ffmpeg encode and concatenation of worker segments. Full renders use `--skip-checks`; the gates",
          "are timed on their own (`--check-only`). frames/s = output frames / wall time; samples/s counts",
