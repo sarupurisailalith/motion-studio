@@ -177,5 +177,65 @@ class Workers(unittest.TestCase):
         self.assertEqual(len(greys(html.parent / "renders" / "frames.mp4")), 72)
 
 
+def tone(path, hz):
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"sine=frequency={hz}:duration=1",
+                    "-ac", "2", str(path)], check=True)
+    return path
+
+
+def audio_md5(mp4):
+    r = subprocess.run(["ffmpeg", "-v", "error", "-i", str(mp4), "-map", "0:a", "-f", "md5", "-"],
+                       capture_output=True, text=True, check=True)
+    return r.stdout.strip()
+
+
+@helpers.slow
+@helpers.needs_chromium
+@helpers.needs_ffmpeg
+class Cache(unittest.TestCase):
+    """E8.4: a rerun whose page files and flags are unchanged reuses the video; only audio is muxed."""
+
+    def setUp(self):
+        self.html = fixture("cached.html")
+        self.d = self.html.parent
+        copy_fixture("perf/cached.js", self.d)
+        self.mp4 = self.d / "renders" / "cached.mp4"
+
+    def run_render(self, *args):
+        r = render(self.html, "--skip-checks", "--workers", "1", *args)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        return r.stdout
+
+    def test_audio_only_change_reuses_the_video(self):
+        a, b = tone(self.d / "a.wav", 440), tone(self.d / "b.wav", 880)
+        self.assertNotIn("cache hit", self.run_render("--audio", a))
+        first, first_audio = frames(self.mp4), audio_md5(self.mp4)
+        log = self.run_render("--audio", b)
+        self.assertIn("cache hit", log)
+        self.assertNotIn("rendering", log)
+        self.assertEqual(frames(self.mp4), first)
+        self.assertNotEqual(audio_md5(self.mp4), first_audio)
+        rep = __import__("json").loads((self.d / "renders" / "cached_report.json").read_text())
+        self.assertEqual(rep["frames"], 24)
+        self.assertIn("cache hit", self.run_render())  # and back to no audio
+        self.assertEqual(frames(self.mp4), first)
+
+    def test_asset_edit_flag_change_and_no_cache_re_render(self):
+        self.run_render()
+        js = self.d / "cached.js"
+        js.write_text(js.read_text().replace("rgb(${g},90,", "rgb(${g},120,"))
+        log = self.run_render()
+        self.assertIn("cache: cached.js changed, re-rendering", log)
+        self.assertIn("cache hit", self.run_render())
+        self.assertNotIn("cache hit", self.run_render("--crf", "20"))
+        self.assertNotIn("cache hit", self.run_render("--no-cache", "--crf", "20"))
+
+    def test_render_with_page_errors_is_not_cached(self):
+        self.html.write_text(self.html.read_text().replace('<script src="cached.js">',
+                                                           '<script src="missing.js"></script><script src="cached.js">'))
+        self.assertIn("cache: not storing this render (page errors)", self.run_render())
+        self.assertNotIn("cache hit", self.run_render())
+
+
 if __name__ == "__main__":
     unittest.main()

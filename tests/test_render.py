@@ -60,7 +60,7 @@ class Compat(unittest.TestCase):
         r = render(html, "--workers", "1", "--duration", "0.3")
         self.assertEqual(r.returncode, 0, r.stderr)
         out = html.parent / "renders"
-        self.assertEqual(sorted(p.name for p in out.iterdir()),
+        self.assertEqual(sorted(p.name for p in out.iterdir() if p.name != ".cache"),  # E8.4 render cache
                          ["blank_frame.mp4", "blank_frame_report.json"])
         rep = json.loads((out / "blank_frame_report.json").read_text())
         self.assertNotIn("format", rep)

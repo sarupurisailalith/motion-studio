@@ -60,6 +60,8 @@ def vlog(*a):
 FORMATS = {"16x9": (1920, 1080), "9x16": (1080, 1920), "1x1": (1080, 1080), "4x5": (1080, 1350)}
 
 _SERVERS = {}
+_SERVED = {}     # E8.4: served folder -> {relative path: sha256 at serve time, or None if missing}
+_EXTERNAL = []   # URLs the pages fetched from anywhere but the local server (renders not cached)
 
 
 def serve(directory: Path) -> str:
@@ -71,6 +73,10 @@ def serve(directory: Path) -> str:
         class Quiet(http.server.SimpleHTTPRequestHandler):
             def log_message(self, *a):
                 pass
+
+            def send_head(self):
+                note_served(directory, self.translate_path(self.path))
+                return super().send_head()
         handler = functools.partial(Quiet, directory=str(directory))
         srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -221,6 +227,7 @@ async def open_page(pw, html: Path, fmt=None, width=None, height=None, scale=1.0
     ctx = await browser.new_context(viewport={"width": width or 1080, "height": height or 1080},
                                     device_scale_factor=scale)
     page = await ctx.new_page()
+    page.on("request", lambda r: note_request(r.url))
     errors = []
     page.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
     page.on("console", lambda m: errors.append(f"console.{m.type}: {m.text}") if m.type == "error" else None)
@@ -710,14 +717,19 @@ def gate_frame_count(out: Path, n_frames: int, audio):
     sys.exit(f"frame count gate: {out} has {got} frames, expected {n_frames}")
 
 
-async def full_render(pw, a, html, fmt, M, D, fps, scale, out, errors):
-    """Render [start, D) in parallel segments and concatenate. Returns the frame count."""
+def plan_workers(a, n_frames, fps):
+    return max(1, min(a.workers, n_frames // max(fps, 1) or 1))
+
+
+async def full_render(pw, a, html, fmt, M, D, fps, scale, out, errors, keep=None):
+    """Render [start, D) in parallel segments and concatenate. Returns the frame count.
+    keep: also write the video-only stream there (E8.4 render cache)."""
     W, H = int(M["width"]), int(M["height"])
     scale_to = (W, H) if scale != 1.0 and not a.preview else None
     n_frames = int(round((D - a.start) * fps))  # export [start, D) — never duplicate the loop endpoint
     sub = max(1, a.subframes)
     loopD = float(M["duration"]) if M.get("loop") else None
-    workers = max(1, min(a.workers, n_frames // max(fps, 1) or 1))
+    workers = plan_workers(a, n_frames, fps)
     bounds = [round(i * n_frames / workers) for i in range(workers + 1)]
     segdir = out.parent / f".{out.stem}_segments"
     segdir.mkdir(exist_ok=True)
@@ -765,10 +777,112 @@ async def full_render(pw, a, html, fmt, M, D, fps, scale, out, errors):
     lst = segdir / "list.txt"
     lst.write_text("".join(f"file '{s.resolve()}'\n" for s in segs))
     subprocess.run(mux_cmd(["-f", "concat", "-safe", "0", "-i", str(lst)], a, out), check=True)
+    if keep:
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(lst),
+                        "-c", "copy", "-movflags", "+faststart", str(keep)], check=True)
     shutil.rmtree(segdir, ignore_errors=True)
     gate_frame_count(out, n_frames, a.audio)
     log(f"done -> {out}  ({out.stat().st_size / 1e6:.1f} MB, {time.time() - t_start:.0f}s)")
     return n_frames
+
+
+def note_served(directory: Path, path: str):
+    """Record a file the local server hands the page, hashed as served (E8.4)."""
+    try:
+        rel = Path(path).resolve().relative_to(directory).as_posix()
+    except ValueError:
+        return
+    seen = _SERVED.setdefault(directory, {})
+    sha = file_sha(Path(path))
+    if seen.setdefault(rel, sha) != sha:
+        seen[rel] = "changed during the render"
+
+
+def note_request(url: str):
+    if not url.startswith((*_SERVERS.values(), "data:", "blob:", "about:")):
+        _EXTERNAL.append(url)
+
+
+_SHA = {}
+
+
+def file_sha(path: Path):
+    """sha256 of a file (memoised on mtime and size), of a folder's names, or None if missing."""
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    if path.is_dir():
+        return "dir:" + hashlib.sha256("\n".join(sorted(os.listdir(path))).encode()).hexdigest()
+    k = (str(path), st.st_mtime_ns, st.st_size)
+    if k not in _SHA:
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        _SHA[k] = h.hexdigest()
+    return _SHA[k]
+
+
+def cache_key(a, fmt, M, D, fps, scale, chromium):
+    """Everything besides the page's files that decides the video stream (not --audio)."""
+    n_frames = int(round((D - a.start) * fps))
+    ff = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True).stdout.split("\n")[0]
+    return {"version": 1, "render.py": file_sha(Path(__file__).resolve()), "chromium": chromium, "ffmpeg": ff,
+            "format": fmt, "size": [int(M["width"]), int(M["height"])], "fps": fps, "start": a.start,
+            "duration": D, "loop": bool(M.get("loop")), "subframes": max(1, a.subframes), "shutter": a.shutter,
+            "crf": a.crf, "scale": scale, "preview": a.preview, "gl": a.gl, "capture": CAPTURE,
+            "workers": plan_workers(a, n_frames, fps)}
+
+
+class RenderCache:
+    """E8.4: renders/.cache/<name>.mp4 keeps the last video-only stream of each output, with
+    <name>.json: the key (flags, Chromium, ffmpeg, render.py) and the sha256 of every file the
+    page fetched. When all of that still matches, the render is skipped and only the audio is
+    muxed again, so a rerun after a mix change takes seconds. Renders that fetched anything
+    from outside the folder, or had page errors, are not cached. --no-cache skips it."""
+
+    def __init__(self, a, fmt, outdir, key):
+        self.root, self.key = a.html.parent.resolve(), key
+        d = outdir / ".cache"
+        name = out_name(a.html.stem, fmt, "_preview" if a.preview else "")
+        self.video, self.meta = d / f"{name}.mp4", d / f"{name}.json"
+        self.video_tmp = d / f".{name}.tmp.mp4"
+        self.a = a
+        d.mkdir(exist_ok=True)
+
+    def reuse(self, out):
+        """Mux the cached video (+ --audio) into out and return its frame count, or None (miss)."""
+        try:
+            m = json.loads(self.meta.read_text())
+        except (OSError, ValueError):
+            return None
+        if m.get("key") != self.key or file_sha(self.video) != m.get("video_sha"):
+            return None
+        for rel, sha in m["files"].items():
+            if file_sha(self.root / rel) != sha:
+                vlog(f"cache: {rel} changed, re-rendering")
+                return None
+        subprocess.run(mux_cmd(["-i", str(self.video)], self.a, out), check=True)
+        gate_frame_count(out, m["frames"], self.a.audio)
+        log(f"cache hit: page files and flags unchanged since the last render, video reused "
+            f"({self.video.name}); --no-cache re-renders -> {out}")
+        return m["frames"]
+
+    def store(self, n_frames, errors):
+        files = dict(_SERVED.get(self.root, {}))
+        bad = (errors and "page errors") or (_EXTERNAL and f"it fetched {_EXTERNAL[0]}") or \
+            next((f"{k} {v}" for k, v in files.items() if v == "changed during the render"), None)
+        if bad or not self.video_tmp.exists():
+            self.video_tmp.unlink(missing_ok=True)
+            if bad:
+                vlog(f"cache: not storing this render ({bad})")
+            return
+        os.replace(self.video_tmp, self.video)
+        tmp = self.meta.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps({"key": self.key, "frames": n_frames, "video_sha": file_sha(self.video),
+                                   "files": files}, indent=1, sort_keys=True))
+        os.replace(tmp, self.meta)
 
 
 async def render_one_format(pw, a, fmt, outdir):
@@ -821,8 +935,15 @@ async def render_one_format(pw, a, fmt, outdir):
         out = a.out if len(a.formats) <= 1 else a.out.with_name(out_name(a.out.stem, fmt, a.out.suffix))
     else:
         out = outdir / out_name(stem, fmt, ("_preview" if a.preview else "") + ".mp4")
+    chromium = browser.version
     await browser.close()
-    n_frames = await full_render(pw, a, a.html, fmt, M, D, fps, scale, out, errors)
+    cache = None if a.no_cache else RenderCache(a, fmt, outdir, cache_key(a, fmt, M, D, fps, scale, chromium))
+    n_frames = cache.reuse(out) if cache else None
+    if n_frames is None:
+        n_frames = await full_render(pw, a, a.html, fmt, M, D, fps, scale, out, errors,
+                                     keep=cache and cache.video_tmp)
+        if cache:
+            cache.store(n_frames, errors)
     report["output"] = str(out)
     report["frames"] = n_frames
     report["gates"]["page_errors"] = errors or "none"
@@ -893,6 +1014,9 @@ def build_parser():
                     help="gates only, no video: determinism (8 sampled times, re-seeked shuffled), loop_seam, "
                          "safe_area (every 0.25 s), text_duration (every frame), page errors")
     ap.add_argument("--skip-checks", action="store_true", help="skip the gates before a full render")
+    ap.add_argument("--no-cache", action="store_true",
+                    help="always render, and don't keep renders/.cache/ (by default a full render whose page "
+                         "files and flags are unchanged reuses the last video and only re-muxes --audio)")
     ap.add_argument("--quiet", action="store_true",
                     help="print only results (output paths, errors, the JSON report): fewer tokens for agents")
     ap.add_argument("--format", metavar="LIST",
