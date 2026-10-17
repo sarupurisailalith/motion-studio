@@ -182,28 +182,79 @@ window.K = (() => {
     return p.replace(/%0?(\d*)d/, (_, n) => String(i).padStart(+n || 0, '0'));
   };
   // Preload and decode every frame. Call inside window.ready: window.ready = K.loadClip(asset)
-  async function loadClip(a) {
+  // Long clips (E12.6): K.loadClip(asset, { window: 2 }) keeps only frames near the current seek
+  // decoded (LRU, ~window s each side) instead of all of them (a 2 min 1080p clip is ~25 GB of
+  // bitmaps). A windowed clip must be awaited per seek: `await K.clipSeek(asset, t)` in seek(t)
+  // before drawing; it decodes that frame (and prefetches the next `ahead` s, default 0.5).
+  async function loadClip(a, opts = {}) {
     if (CLIPS.has(clipKey(a))) return CLIPS.get(clipKey(a)).ready;
+    const win = opts.window === true ? 2 : +opts.window || 0;
+    if (win > 0) {
+      const c = { win, ahead: opts.ahead ?? 0.5, map: new Map(), cur: -1, decoded: 0,
+                  cap: Math.ceil((2 * win + (opts.ahead ?? 0.5)) * a.fps) + 2 };
+      c.ready = decodeFrame(a, c, 0).then(() => c);
+      CLIPS.set(clipKey(a), c);
+      return c.ready;
+    }
     const frames = [];
     for (let i = 0; i < a.frame_count; i++) { const img = new Image(); img.src = framePath(a, i); frames.push(img); }
     const ready = Promise.all(frames.map(img => img.decode().catch(() => {
       throw new Error(`K.loadClip: could not decode ${img.src} (asset "${a.id}")`);
     }))).then(() => frames);
     CLIPS.set(clipKey(a), { frames, ready });
+    if (a.frame_count * (a.w || 0) * (a.h || 0) * 4 > 1.5e9)
+      console.warn(`K.loadClip: "${a.id}" decodes to ~${(a.frame_count * a.w * a.h * 4 / 1e9).toFixed(1)} GB; use K.loadClip(asset, { window: 2 })`);
     return ready;
   }
+  const frameIndex = (a, t) => clamp(Math.floor(t * a.fps + 1e-6), 0, a.frame_count - 1);
+  // windowed clips: decode frame i once, keep it until the LRU (Map insertion order) drops it
+  function decodeFrame(a, c, i) {
+    let e = c.map.get(i);
+    if (e) { c.map.delete(i); c.map.set(i, e); return e.p; }
+    const img = new Image();
+    img.src = framePath(a, i);
+    e = { img, ok: false, p: null };
+    e.p = img.decode().then(() => { e.ok = true; c.decoded++; return img; }, () => {
+      c.map.delete(i);
+      throw new Error(`K.loadClip: could not decode ${img.src} (asset "${a.id}")`);
+    });
+    c.map.set(i, e);
+    for (const k of c.map.keys()) {           // oldest first; never the frame being drawn
+      if (c.map.size <= c.cap) break;
+      if (k !== c.cur && k !== i) c.map.delete(k);
+    }
+    return e.p;
+  }
+  // Make the frame for clip time t drawable (windowed clips; a no-op for preloaded ones).
+  async function clipSeek(a, t) {
+    const c = CLIPS.get(clipKey(a));
+    if (!c) throw new Error(`K.clipSeek: clip "${a.id}" not loaded — await K.loadClip(asset, { window }) inside window.ready`);
+    if (!c.map) return;
+    const i = frameIndex(a, t);
+    c.cur = i;
+    await decodeFrame(a, c, i);
+    c.cur = i;
+    const n = Math.ceil(c.ahead * a.fps);
+    for (let k = 1; k <= n && i + k < a.frame_count; k++) decodeFrame(a, c, i + k).catch(() => {});
+  }
+  const clipStats = a => { const c = CLIPS.get(clipKey(a)); return c && c.map ? { windowed: true, resident: c.map.size, cap: c.cap, decoded: c.decoded } : c ? { windowed: false, resident: c.frames.length } : null; };
   // Frame for clip time t: clamp(floor(t * fps), 0, frame_count - 1). The tiny epsilon keeps
   // t = k / fps on frame k despite float error (e.g. 0.3 * 10 = 2.9999...).
   function clipFrame(a, t) {
     const c = CLIPS.get(clipKey(a));
     if (!c) throw new Error(`K.clipFrame: clip "${a.id}" not loaded — await K.loadClip(asset) inside window.ready`);
+    if (c.map) {
+      const e = c.map.get(frameIndex(a, t));
+      if (!e || !e.ok) throw new Error(`K.clipFrame: frame ${frameIndex(a, t)} of windowed clip "${a.id}" isn't decoded — await K.clipSeek(clip, t) in seek(t) first`);
+      return e.img;
+    }
     return c.frames[clamp(Math.floor(t * a.fps + 1e-6), 0, c.frames.length - 1)];
   }
   function drawClip(ctx, a, t, x = 0, y = 0, w, h) {
     const img = clipFrame(a, t);
     ctx.drawImage(img, x, y, w ?? img.naturalWidth, h ?? img.naturalHeight);
   }
-  Object.assign(K, { loadClip, clipFrame, drawClip });
+  Object.assign(K, { loadClip, clipSeek, clipStats, clipFrame, drawClip });
   Object.assign(K, { FORMATS, init, pick, nextFormat, formatSearch, FORMAT: null, safe: null });
 
   // =======================================================================

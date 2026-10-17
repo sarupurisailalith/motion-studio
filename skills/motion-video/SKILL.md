@@ -40,6 +40,8 @@ rounds if wanted, approval gate). Adapt the closest playbook in `references/genr
   samples). Show the swatch; the user confirms or overrides (`brand.py P --role accent=#hex
   --font display="Family" --confirm`). Write the confirmed hexes, roles and fonts into the brief's
   `<art direction>`. Unattended: use the suggestion and say so.
+- **Footage-led** (a talking clip recut with graphics; the brief has `<footage>`): follow
+  `references/footage.md` (transcribe.py → cut.py → story.json → `templates/footage-composition.html`).
 
 ### 2. Storyboard, then sign-off
 Table: `time | on screen | purpose | exit | carried object`. About one idea per 1–2 s; hook in

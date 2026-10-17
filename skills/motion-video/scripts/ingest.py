@@ -10,13 +10,16 @@ Usage:
   python3 ingest.py motion/promo ~/Desktop/logo.svg ~/Desktop/shots/   # files and folders
   python3 ingest.py motion/promo /mnt/user-data/uploads/* --attached     # chat uploads
   python3 ingest.py motion/promo hero.png --max-dim 3840                  # cap long side (px)
-  python3 ingest.py motion/promo demo.mov --clip-fps 30                   # clip -> JPEG frames
+  python3 ingest.py motion/promo demo.mov --clip-fps 30                   # clip -> JPEG frames (+ its audio)
+  python3 ingest.py motion/promo talk.mp4 --clip-max-dim 1280             # smaller frames for a corner card
 
 Writes (under PROJECT/assets/):
   assets.json   inventory {version, assets:[{id, kind, path, source, orig, ...}]}
   assets.js     window.ASSETS = <assets.json>;   (for file:// previews)
   fonts.css     one @font-face per ingested font (rewritten every run)
   images/ svg/ fonts/ audio/ docs/ video/<id>/00000.jpg ...
+  A clip's own sound becomes a second entry (kind audio, id <clip id>-audio, assets/audio/<that id>.wav,
+  48 kHz) sample-aligned to the clip's frame 0; the video entry links to it as "audio".
 
 Prints log lines, then a summary JSON {ingested, missing, unreadable, notes}.
 Exit 1 if any input was missing or unreadable (the rest are still ingested).
@@ -347,7 +350,8 @@ def _ffprobe(src: Path):
     if not (shutil.which("ffmpeg") and shutil.which("ffprobe")):
         raise Unreadable("ffmpeg/ffprobe not on PATH (needed for video and audio)")
     p = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
-                        "stream=codec_type,width,height,avg_frame_rate,sample_rate:format=duration",
+                        "stream=codec_type,width,height,avg_frame_rate,r_frame_rate,sample_rate,start_time:"
+                        "format=duration,start_time",
                         "-of", "json", str(src)], capture_output=True, text=True)
     if p.returncode != 0:
         raise Unreadable("ffprobe can't read it: " + (p.stderr.strip().splitlines() or ["unknown error"])[-1])
@@ -367,24 +371,78 @@ def _num(x):
     return int(x) if float(x).is_integer() else x
 
 
+def _rate(r):
+    num, _, den = str(r or "0/1").partition("/")
+    try:
+        return float(num) / float(den or 1)
+    except (ValueError, ZeroDivisionError):
+        return 0.0
+
+
+def _clip_audio(src, info, aid, adir, n_frames, fps):
+    """The clip's first audio stream -> assets/audio/<aid>.wav (48 kHz stereo 16-bit), sample 0 =
+    the clip's frame 0, exactly n_frames / fps long. Returns (audio entry fields, notes)."""
+    import numpy as np, wave
+    fmt0 = float(info.get("format", {}).get("start_time") or 0)
+    v = next(st for st in info["streams"] if st.get("codec_type") == "video")
+    v0 = float(v.get("start_time") or 0) - fmt0      # where frame 0 sits on the file's timeline
+    # first_pts=0: pad a late-starting audio stream with silence so it lines up with the file timeline
+    p = subprocess.run(["ffmpeg", "-v", "error", "-i", str(src), "-map", "0:a:0", "-vn", "-sn",
+                        "-af", "aresample=48000:async=1:first_pts=0", "-ac", "2", "-ar", "48000",
+                        "-f", "s16le", "-"], capture_output=True)
+    if p.returncode != 0:
+        raise Unreadable("ffmpeg couldn't decode the clip's audio: "
+                         + (p.stderr.decode(errors="replace").strip().splitlines() or ["unknown error"])[-1])
+    x = np.frombuffer(p.stdout, "<i2").reshape(-1, 2)
+    k, n = int(round(v0 * 48000)), int(round(n_frames / fps * 48000))
+    x = x[k:] if k >= 0 else np.concatenate([np.zeros((-k, 2), "<i2"), x])
+    x = x[:n] if len(x) >= n else np.concatenate([x, np.zeros((n - len(x), 2), "<i2")])
+    dst = adir / "audio" / (aid + ".wav")
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dst.with_name(f".{aid}.partial.wav")
+    with wave.open(str(tmp), "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(48000)
+        w.writeframes(np.ascontiguousarray(x).tobytes())
+    os.replace(tmp, dst)
+    notes = [f"audio offset {v0 * 1000:+.1f} ms vs the first frame: aligned"] if abs(v0) >= 0.0005 else []
+    return {"path": f"assets/audio/{dst.name}", "duration": round(n / 48000, 4), "sr": 48000}, notes
+
+
 def handle_video(src, aid, adir, opts):
     info = _ffprobe(src)
     streams = info.get("streams", [])
-    if not any(st.get("codec_type") == "video" for st in streams):
+    vs = next((st for st in streams if st.get("codec_type") == "video"), None)
+    if vs is None:
         raise Unreadable("no video stream")
     notes = []
-    if any(st.get("codec_type") == "audio" for st in streams):
-        notes.append("the clip's own audio track is not used; ingest an audio file for sound")
+    clip_fps = opts.clip_fps
+    r, avg = _rate(vs.get("r_frame_rate")), _rate(vs.get("avg_frame_rate"))
+    if r and avg and abs(r - avg) / r > 0.01:
+        # phone footage is often VFR (e.g. 60 fps nominal, ~30 average): the fps filter below
+        # resamples it to a constant rate, so frame k is always time k / clip_fps
+        notes.append(f"variable frame rate source (nominal {r:g}, average {avg:.2f} fps): "
+                     f"resampled to a constant {clip_fps:g} fps; cut on frame boundaries")
+    if getattr(opts, "clip_fps_from", None) == "default":
+        notes.append(f"frames at {clip_fps:g} fps (no MOTION.fps or brief fps found): re-ingest with "
+                     "--clip-fps <piece fps> for 1:1 frames")
     final = adir / "video" / aid
     work = adir / "video" / f".{aid}.partial"
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)
-    m = opts.max_dim
-    vf = (f"fps={opts.clip_fps},"
+    m = opts.clip_max_dim or opts.max_dim
+    vf = (f"fps={clip_fps},"
           f"scale='min(iw,{m})':'min(ih,{m})':force_original_aspect_ratio=decrease:flags=lanczos")
     try:
-        _ffmpeg(["-i", str(src), "-an", "-sn", "-vf", vf, "-q:v", "2", "-start_number", "0",
-                 str(work / "%05d.jpg")], "extract frames")
+        # passthrough: frame 0 is the first real picture (no held copies padding a late video
+        # start), so the clip audio is trimmed to match it in _clip_audio
+        args = ["-i", str(src), "-an", "-sn", "-vf", vf, "-q:v", "2", "-start_number", "0",
+                str(work / "%05d.jpg")]
+        try:
+            _ffmpeg(args[:6] + ["-fps_mode", "passthrough"] + args[6:], "extract frames")
+        except Unreadable:   # ffmpeg < 5.1 has no -fps_mode
+            _ffmpeg(args[:6] + ["-vsync", "passthrough"] + args[6:], "extract frames")
         frames = sorted(work.glob("*.jpg"))
         if not frames:
             raise Unreadable("no frames could be decoded")
@@ -396,10 +454,17 @@ def handle_video(src, aid, adir, opts):
     shutil.rmtree(final, ignore_errors=True)
     os.replace(work, final)
     n = len(frames)
-    fps = _num(opts.clip_fps)
+    if max(w, h) < max(int(vs.get("width") or 0), int(vs.get("height") or 0)):
+        notes.append(f"frames downscaled to {w}x{h} (--{'clip-' if opts.clip_max_dim else ''}max-dim {m})")
+    fps = _num(clip_fps)
     rel = f"assets/video/{aid}/"
-    return {"path": rel, "w": w, "h": h, "fps": fps, "frame_count": n,
-            "duration": round(n / opts.clip_fps, 4), "pattern": rel + "%05d.jpg"}, notes
+    fields = {"path": rel, "w": w, "h": h, "fps": fps, "frame_count": n,
+              "duration": round(n / clip_fps, 4), "pattern": rel + "%05d.jpg"}
+    if any(st.get("codec_type") == "audio" for st in streams):
+        fields["_audio"] = lambda audio_id: _clip_audio(src, info, audio_id, adir, n, clip_fps)
+    else:
+        notes.append("the clip has no audio stream (no clip audio written)")
+    return fields, notes
 
 
 def handle_audio(src, aid, adir, opts):
@@ -483,6 +548,64 @@ def write_fonts_css(adir: Path, inv):
     (adir / "fonts.css").write_text("\n".join(out))
 
 
+def ingest_clip_audio(project, adir, inv, by_orig, entry, clip_audio, source, summary):
+    """E12.1: the clip's own sound as a linked audio entry (orig = '<clip orig>#audio')."""
+    key = entry["orig"] + "#audio"
+    old = by_orig.get(key)
+    if clip_audio is None:
+        if old:  # the new version of the clip has no audio: drop the stale one
+            remove_stored(project, old)
+            inv["assets"].remove(old)
+            del by_orig[key]
+        return None
+    taken = {e["id"] for e in inv["assets"]}
+    aid = old["id"] if old else entry["id"] + "-audio"
+    n = 1
+    while not old and aid in taken:
+        n += 1
+        aid = f"{entry['id']}-audio-{n}"
+    try:
+        fields, notes = clip_audio(aid)
+    except Unreadable as e:
+        summary["notes"].append({"id": entry["id"], "note": f"clip audio not written ({e})"})
+        return None
+    a = {"id": aid, "kind": "audio", "path": fields.pop("path"), "source": source, "orig": key,
+         "of": entry["id"]}
+    a.update(fields)
+    if old:
+        inv["assets"][inv["assets"].index(old)] = a
+    else:
+        inv["assets"].append(a)
+    by_orig[key] = a
+    entry["audio"] = aid
+    for note in notes:
+        summary["notes"].append({"id": aid, "note": note})
+    summary["ingested"].append(a)
+    return a
+
+
+FPS_RE = re.compile(r"window\.MOTION\s*=\s*(?:K\.init\()?\{[^}]*?\bfps\s*:\s*(\d+(?:\.\d+)?)", re.S)
+
+
+def piece_fps(project: Path):
+    """The piece's fps, for --clip-fps: MOTION.fps of the project's composition(s), else an
+    'NN fps' in brief.md, else None. -> (fps, where) or (None, None)."""
+    found = set()
+    for html in sorted(project.glob("*.html")):
+        try:
+            found |= {float(m) for m in FPS_RE.findall(html.read_text(errors="replace"))}
+        except OSError:
+            continue
+    if len(found) == 1:
+        return found.pop(), "MOTION.fps"
+    brief = project / "brief.md"
+    if not found and brief.exists():
+        rates = {float(m) for m in re.findall(r"\b(\d{2})(?:\.0+)?\s*fps\b", brief.read_text(errors="replace"), re.I)}
+        if len(rates) == 1:
+            return rates.pop(), "brief.md"
+    return None, None
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("project", type=Path, help="project folder (the one holding the composition HTML)")
@@ -491,15 +614,23 @@ def main():
                     help="mark these as files attached in Claude app chat (source: attached)")
     ap.add_argument("--max-dim", type=int, default=3840,
                     help="cap the long side of images and clips at this many px (default 3840)")
-    ap.add_argument("--clip-fps", type=float, default=30,
-                    help="frame rate of the JPEG sequence extracted from video clips (default 30)")
+    ap.add_argument("--clip-max-dim", type=int,
+                    help="cap the long side of clip frames separately (e.g. 1280 for a corner card; "
+                         "default: --max-dim)")
+    ap.add_argument("--clip-fps", type=float,
+                    help="frame rate of the JPEG sequence extracted from video clips (default: the piece's "
+                         "fps from the project's MOTION or brief.md, else 30)")
     a = ap.parse_args()
-    if a.max_dim < 16:
-        sys.exit("--max-dim must be at least 16")
-    if a.clip_fps <= 0:
+    if a.max_dim < 16 or (a.clip_max_dim is not None and a.clip_max_dim < 16):
+        sys.exit("--max-dim / --clip-max-dim must be at least 16")
+    if a.clip_fps is not None and a.clip_fps <= 0:
         sys.exit("--clip-fps must be positive")
 
     project = a.project
+    if a.clip_fps is None:
+        fps, where = piece_fps(project)
+        a.clip_fps = fps or 30.0
+        a.clip_fps_from = where or "default"
     adir = project / "assets"
     adir.mkdir(parents=True, exist_ok=True)
     inv = load_inventory(adir)
@@ -539,6 +670,7 @@ def main():
             continue  # a previous good copy (if any) stays in the inventory
         if old and old.get("path") != fields["path"]:
             remove_stored(project, old)
+        clip_audio = fields.pop("_audio", None)
         entry = {"id": aid, "kind": kind, "path": fields.pop("path"), "source": source, "orig": orig}
         entry.update(fields)
         if old:
@@ -550,6 +682,10 @@ def main():
             summary["notes"].append({"id": aid, "note": n})
         log(f"{kind:5s} {aid:24s} <- {src}")
         summary["ingested"].append(entry)
+        if kind == "video":
+            derived = ingest_clip_audio(project, adir, inv, by_orig, entry, clip_audio, source, summary)
+            if derived:
+                log(f"audio {derived['id']:24s} <- {src} (clip audio)")
 
     write_inventory(adir, inv)
     write_fonts_css(adir, inv)

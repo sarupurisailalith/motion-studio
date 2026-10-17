@@ -17,7 +17,8 @@ Usage:
   python3 render.py comp.html --check-only            # gates only, no video: determinism, loop seam,
                                                       # safe_area ([data-safe] inside K.safe.ui),
                                                       # text_duration ([data-text] visible >= 8 frames),
-                                                      # contrast ([data-text] >= 4.5:1 on what's behind it)
+                                                      # contrast ([data-text] >= 4.5:1 on what's behind it);
+                                                      # footage pieces add cue_timing + claim_trace
   python3 render.py comp.html --check-only --thorough # denser sampling (slower)
   python3 render.py comp.html --workers 4             # parallel render (default: half the CPUs, max 4)
 
@@ -685,6 +686,13 @@ async def run_gates(page, a, M, D, fps, report):
     vlog("gate text_duration:", report["gates"]["text_duration"])
     report["gates"]["contrast"] = await gate_contrast(page, D, fps, step=0.1 if thorough(a) else 0.25)
     vlog("gate contrast:", report["gates"]["contrast"])
+    # footage pieces only (window.FOOTAGE / data-cue / data-claim): cue_timing, claim_trace (E12.11)
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import _footage_gates
+    await _footage_gates.run(page, a.html.parent, D, fps, report)
+    for k in ("cue_timing", "claim_trace"):
+        if k in report["gates"]:
+            vlog(f"gate {k}:", report["gates"][k])
 
 
 async def full_render(pw, a, html, fmt, M, D, fps, scale, out, errors):

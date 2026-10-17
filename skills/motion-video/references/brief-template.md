@@ -16,6 +16,15 @@ Fill every field before writing code. Defaults are fine; blanks are not.
                 12–15 s | lockup". Supplied assets are used as-is: never
                 redrawn, recoloured or replaced by a drawn stand-in. None
                 supplied → say so; never invent UI, logos or numbers.
+<footage>       Only for a footage-led piece (someone talking on camera → a new
+                edit; read references/footage.md). renderer: footage. Clip id(s)
+                from assets.json, the script or "faster-whisper", the facts
+                file (docs/source.md: one fact per line with its origin), the
+                speaker's name/role as it may appear on screen, face focus
+                point, cut policy (fillers, pauses > 0.6 s, retakes; user
+                approves the cut list), speaker layouts per role, captions
+                on/off. story.json (roles, claims, cues on word ids) is signed
+                off with the storyboard.
 <deliverable>   Duration (exact, e.g. 20.00 s), resolution and aspect(s),
                 fps, loop yes/no, MP4 plus editable source, file-size cap,
                 sound on/off.

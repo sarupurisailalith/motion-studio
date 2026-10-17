@@ -39,7 +39,12 @@ names. Pass `--quiet` to render.py. Keep script output out of replies; quote num
    continue: write the assumption into the brief's `<start>` (e.g. "unattended: storyboard not
    signed off; proceeded with 9x16,1x1") and repeat it in the final reply.
 4. **Build.** Use the scaffolded `P/<slug>.html` (or copy a template **and** `templates/kit.js`
-   into `P`); `gsap`/`three` need `python3 $S/vendor.py P gsap|three` first. If a track was supplied, run
+   into `P`); `gsap`/`three` need `python3 $S/vendor.py P gsap|three` first. If the brief has
+   `<footage>` (renderer: footage, a talking clip recut with graphics), follow
+   `references/footage.md` instead: transcribe.py → cut.py suggest (show the cut list at the
+   sign-off gate) → story.json + story.py → copy `templates/footage-composition.html`, `kit.js`
+   and `kit-footage.js`; voice via `cut.py voice` and `mix.py --vo`, then
+   `check.py --edl P/edl.json` in step 8. If a track was supplied, run
    `python3 $S/beats.py --track <song> --duration D --out P` before timing any scene, and
    include `beats.js` before the kit script. Lay out per format with `K.pick`, keep
    `[data-safe]` text inside `K.safe.ui`, put the brief's hits in `MOTION.hits`.
