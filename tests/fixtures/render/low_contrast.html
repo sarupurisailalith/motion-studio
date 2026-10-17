@@ -1,0 +1,16 @@
+<!doctype html><html><head><meta charset="utf-8"><title>render fixture: contrast</title>
+<!-- E5.6 contrast fixture. #pale [data-text] is light grey on the light page all the time (about 1.4:1).
+     #moving [data-text] is white on a dark panel until t = 1 s; then the panel slides away and the
+     same white words sit on the light page. #ok stays dark on light (passes). -->
+<style>html,body{margin:0;background:#000}#s{position:absolute;left:0;top:0;width:320px;height:320px;overflow:hidden;background:#f2efe9}
+.t{position:absolute;left:20px;font:bold 28px sans-serif}
+#pale{top:20px;color:#cfcac2}
+#panel{position:absolute;left:0;top:120px;width:320px;height:60px;background:#1a1a1a}
+#moving{top:130px;color:#fff}
+#ok{top:240px;color:#111}</style></head>
+<body><div id="s"><div class="t" id="pale" data-text>pale</div><div id="panel"></div>
+<div class="t" id="moving" data-text>moving</div><div class="t" id="ok" data-text>fine</div></div><script>
+window.MOTION = { width: 320, height: 320, fps: 30, duration: 2, loop: false };
+window.ready = Promise.resolve();
+window.seek = t => { document.getElementById('panel').style.left = (t < 1 ? 0 : 400) + 'px'; };
+</script></body></html>

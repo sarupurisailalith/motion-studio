@@ -10,22 +10,30 @@ Usage:
   python3 render.py comp.html                         # full render -> comp.mp4
   python3 render.py comp.html --preview               # 5 s test render at half res
   python3 render.py comp.html --stills 0,1.5,3,4.5    # PNG stills only (fast review)
-  python3 render.py comp.html --sheet                 # contact sheet of 16 evenly spaced stills
+  python3 render.py comp.html --sheet                 # contact sheet of 16 evenly spaced stills (stills
+                                                      # -> renders/stills/)
   python3 render.py comp.html --subframes 4           # motion blur (4 samples / frame)
   python3 render.py comp.html --audio track.wav       # mux audio (+ loudnorm to -14 LUFS)
   python3 render.py comp.html --check-only            # gates only, no video: determinism, loop seam,
                                                       # safe_area ([data-safe] inside K.safe.ui),
-                                                      # text_duration ([data-text] visible >= 8 frames)
+                                                      # text_duration ([data-text] visible >= 8 frames),
+                                                      # contrast ([data-text] >= 4.5:1 on what's behind it)
+  python3 render.py comp.html --check-only --thorough # denser sampling (slower)
   python3 render.py comp.html --workers 4             # parallel render (default: half the CPUs, max 4)
 
   python3 render.py comp.html --format 16x9,9x16      # one render per format -> comp_16x9.mp4, comp_9x16.mp4
                                                       # (page gets ?format=&w=&h=; formats: 16x9 9x16 1x1 4x5)
-  python3 render.py comp.html --format 16x9,9x16 --deliver   # + poster, sheet per format, renders/deliver.json
+  python3 render.py comp.html --format 16x9,9x16 --deliver   # + poster, sheet, phone sheet per format,
+                                                             # renders/deliver.json
   python3 render.py comp.html --poster 4.5            # one PNG -> renders/comp_poster.png (no T: MOTION.poster)
   python3 render.py comp.html --strip 2:3:6 --subframes 4  # 6 blurred stills across a transition, one row
   python3 render.py comp.html --phone                 # contact sheet at phone size -> comp_sheet_phone.png
   python3 render.py comp.html --contact beats         # one still per downbeat (needs beats.js)
   python3 render.py comp.html --hits                  # resolve MOTION.hits -> renders/comp_hits.json, no render
+
+Gates sample fixed times: determinism checks 8 times drawn from a fixed seed (the same every run),
+contrast and safe_area every 0.25 s. A pass means those samples were clean, not that every frame is;
+--thorough samples more densely.
 
 Review renders (--stills --sheet --poster --strip --phone --contact) and --check-only combine with
 --format; every output then gets the _<fmt> suffix (comp_9x16_poster.png). With --format, the
@@ -165,6 +173,8 @@ async def check_determinism(page, D, fps, samples=6):
     [(t, n_px, max_diff, (x0, x1, y0, y1))] for every time that differed."""
     rng = random.Random(7)
     ts = sorted({round(rng.uniform(0, D), 4) for _ in range(samples)} | {0.0, round(D / 2, 4)})
+    vlog(f"determinism: {len(ts)} times (fixed seed 7, so the same times every run; a pass is evidence, "
+         f"not proof{'' if samples > 6 else ': --thorough samples more'})")
     first = {}
     for t in ts:
         first[t] = await snap(page, t)
@@ -178,6 +188,11 @@ async def check_determinism(page, D, fps, samples=6):
             if d:
                 bad.append((t,) + d)
     return sorted(bad)
+
+
+def thorough(a):
+    """--thorough (D.9): denser gate sampling, slower. getattr: older callers' namespaces lack it."""
+    return bool(getattr(a, "thorough", False))
 
 
 def describe_determinism(bad):
@@ -281,6 +296,23 @@ async def sheet_from_times(page, ts, out: Path, tw: int, cols: int, grab=None):
     return out
 
 
+async def deliver_sheets(page, D, outdir, stem, fmt):
+    """--deliver: the contact sheet and the phone-size sheet (D.4) from one set of 16 stills."""
+    import tempfile
+    ts = [D * i / 16 for i in range(16)]
+    with tempfile.TemporaryDirectory(prefix="motion-sheet-") as td:
+        paths = []
+        for i, t in enumerate(ts):
+            p = Path(td) / f"{i:04d}.png"
+            p.write_bytes(await snap(page, t))
+            paths.append(p)
+        sheet = outdir / out_name(stem, fmt, "_sheet.png")
+        phone = outdir / out_name(stem, fmt, "_sheet_phone.png")
+        tile_sheet(paths, sheet, tw=480, cols=4)
+        tile_sheet(paths, phone, tw=270, cols=4)
+    return sheet, phone
+
+
 def is_review(a):
     return bool(a.stills or a.sheet or a.poster is not None or a.strip or a.phone or a.contact)
 
@@ -324,12 +356,14 @@ async def review(page, a, M, D, fps, stem, fmt, outdir):
 async def review_stills(page, a, D, stem, fmt, outdir):
     """--stills / --sheet: PNG stills and a 4x4 contact sheet (fast review loop)."""
     ts = [float(x) for x in a.stills.split(",")] if a.stills else [D * i / 16 for i in range(16)]
+    sdir = outdir if a.stills else outdir / "stills"   # D.2: --sheet alone keeps its stills out of renders/
+    sdir.mkdir(exist_ok=True)
     paths = []
     for t in ts:
-        p = outdir / out_name(stem, fmt, f"_t{t:07.3f}.png")
+        p = sdir / out_name(stem, fmt, f"_t{t:07.3f}.png")
         p.write_bytes(await snap(page, t))
         paths.append(p)
-    log(f"saved {len(paths)} stills -> {outdir}")
+    log(f"saved {len(paths)} stills -> {sdir}")
     if a.sheet:
         sheet = outdir / out_name(stem, fmt, "_sheet.png")
         tile_sheet(paths, sheet, tw=480, cols=4)
@@ -511,10 +545,134 @@ async def gate_text_duration(page, D, fps, loop):
     return "WARN " + "; ".join(short[:10]) + more
 
 
+# E5.6 contrast: probe the visible [data-text] elements at t (their fill colour, effective opacity and
+# the line boxes of their words), then hide only the glyphs so a screenshot shows what's behind them.
+CONTRAST_PROBE_JS = "async ({ t, W, H }) => {" + DOM_HELPERS_JS + """
+  document.getElementById('__motion_contrast')?.remove();   // read the real colours first
+  await window.seek(t);
+  const cv = (window.__mcCanvas ||= document.createElement('canvas'));
+  cv.width = cv.height = 1;
+  const cx = cv.getContext('2d', { willReadFrequently: true });
+  const rgba = (c) => {              // any CSS colour -> [r, g, b, a] in sRGB 0-255, null if not a colour
+    if (!c || c === 'none' || c.startsWith('url(')) return null;
+    cx.clearRect(0, 0, 1, 1); cx.fillStyle = '#000'; cx.fillStyle = c; cx.fillRect(0, 0, 1, 1);
+    return [...cx.getImageData(0, 0, 1, 1).data];
+  };
+  const out = [];
+  document.querySelectorAll('[data-text]').forEach((el, i) => {
+    const vis = __vis(el);
+    if (vis < 0.9) return;
+    const cs = getComputedStyle(el);
+    const isSvg = el instanceof SVGElement;
+    const col = el instanceof HTMLCanvasElement ? null      // canvas/WebGL text: no CSS colour to read
+              : rgba(isSvg ? cs.fill : (cs.webkitTextFillColor || cs.color));
+    let rects = [];
+    if (!isSvg) {
+      const r = document.createRange(); r.selectNodeContents(el);
+      rects = [...r.getClientRects()];
+    }
+    if (!rects.length) rects = [el.getBoundingClientRect()];
+    rects = rects.map(b => [Math.max(0, b.left), Math.max(0, b.top), Math.min(W, b.right), Math.min(H, b.bottom)])
+                 .filter(([x0, y0, x1, y1]) => x1 - x0 >= 1 && y1 - y0 >= 1);
+    if (!rects.length) return;
+    out.push({ i, name: __name(el), color: col, opacity: vis, rects });
+  });
+  if (out.length) {
+    const s = document.createElement('style');
+    s.id = '__motion_contrast';
+    s.textContent = '[data-text],[data-text] *{color:transparent!important;-webkit-text-fill-color:transparent!important;' +
+                    'fill:transparent!important;text-decoration-color:transparent!important;caret-color:transparent!important}';
+    document.head.appendChild(s);
+  }
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  return out;
+}"""
+
+CONTRAST_RESTORE_JS = "() => { const s = document.getElementById('__motion_contrast'); if (s) s.remove(); }"
+
+MIN_CONTRAST = 4.5        # WCAG AA for body text
+CONTRAST_AREA = 10        # percentile: 90 % of the area behind the words must reach MIN_CONTRAST
+
+
+def rel_luminance(rgb):
+    """WCAG 2.x relative luminance of sRGB values 0-255 (any array shape ending in 3)."""
+    import numpy as np
+    c = np.asarray(rgb, dtype=np.float64) / 255.0
+    c = np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+    return c @ np.array([0.2126, 0.7152, 0.0722])
+
+
+def text_contrast(color, alpha, bg):
+    """Contrast ratio of text `color` (RGB 0-255) at opacity `alpha` over each background pixel in
+    `bg` (N x 3) -> the CONTRAST_AREA-th percentile (the ratio 90 % of the area reaches)."""
+    import numpy as np
+    bg = np.asarray(bg, dtype=np.float64).reshape(-1, 3)
+    fg = alpha * np.asarray(color[:3], dtype=np.float64) + (1 - alpha) * bg   # text blended over each pixel
+    lf, lb = rel_luminance(fg), rel_luminance(bg)
+    ratio = (np.maximum(lf, lb) + 0.05) / (np.minimum(lf, lb) + 0.05)
+    return float(np.percentile(ratio, CONTRAST_AREA))
+
+
+async def gate_contrast(page, D, fps, step=0.25):
+    """E5.6 contrast: each visible [data-text] element (opacity >= 0.9) against the rendered pixels
+    behind its words, every `step` s. Worst ratio per element; WARN below MIN_CONTRAST."""
+    import io
+    import numpy as np
+    from PIL import Image
+    W, H = await page.evaluate("[window.MOTION.width, window.MOTION.height]")
+    if not await page.evaluate("document.querySelectorAll('[data-text]').length"):
+        return "pass (no [data-text] elements)"
+    ts = sorted({round(k * step, 6) for k in range(int(math.ceil(D / step)))} | {max(0.0, D - 1 / fps)})
+    worst, unmeasured, checked = {}, set(), 0
+    try:
+        for t in ts:
+            els = await page.evaluate(CONTRAST_PROBE_JS, {"t": t, "W": W, "H": H})
+            if not els:
+                continue
+            x0 = min(r[0] for e in els for r in e["rects"])
+            y0 = min(r[1] for e in els for r in e["rects"])
+            x1 = max(r[2] for e in els for r in e["rects"])
+            y1 = max(r[3] for e in els for r in e["rects"])
+            clip = {"x": x0, "y": y0, "width": x1 - x0, "height": y1 - y0}
+            png = await page.screenshot(type="png", clip=clip, animations="disabled", caret="hide")
+            img = np.asarray(Image.open(io.BytesIO(png)).convert("RGB"))
+            s = img.shape[1] / clip["width"]
+            checked += 1
+            for e in els:
+                if not e["color"] or e["color"][3] == 0:
+                    unmeasured.add(e["name"])
+                    continue
+                px = []
+                for rx0, ry0, rx1, ry1 in e["rects"]:
+                    a0, a1 = int((rx0 - x0) * s), int(math.ceil((rx1 - x0) * s))
+                    b0, b1 = int((ry0 - y0) * s), int(math.ceil((ry1 - y0) * s))
+                    px.append(img[b0:b1, a0:a1].reshape(-1, 3))
+                bg = np.concatenate(px)
+                if len(bg) > 20000:
+                    bg = bg[:: len(bg) // 20000]
+                if not len(bg):
+                    continue
+                ratio = text_contrast(e["color"], e["color"][3] / 255 * e["opacity"], bg)
+                if e["name"] not in worst or ratio < worst[e["name"]][0]:
+                    worst[e["name"]] = (ratio, t)
+    finally:
+        await page.evaluate(CONTRAST_RESTORE_JS)
+    note = (f"; not measured (canvas text, gradient or transparent fill): {', '.join(sorted(unmeasured))}"
+            if unmeasured else "")
+    if not checked:
+        return "pass (no [data-text] element visible at the sampled times)"
+    low = sorted((r, t, n) for n, (r, t) in worst.items() if r < MIN_CONTRAST)
+    if not low:
+        return "pass" + (f" ({note[2:]})" if note else "")
+    more = f"; … {len(low) - 10} more" if len(low) > 10 else ""
+    return ("WARN " + "; ".join(f"{n} {r:.1f}:1 at t={t:.3f}" for r, t, n in low[:10]) + more
+            + f" (min {MIN_CONTRAST}:1 over {100 - CONTRAST_AREA} % of the area behind the words)" + note)
+
+
 async def run_gates(page, a, M, D, fps, report):
     if a.skip_checks:
         return
-    bad = await check_determinism(page, D, fps)
+    bad = await check_determinism(page, D, fps, samples=max(30, int(D * 4)) if thorough(a) else 6)
     report["gates"]["determinism"] = describe_determinism(bad)
     vlog("gate determinism:", report["gates"]["determinism"])
     if M.get("loop"):
@@ -525,6 +683,8 @@ async def run_gates(page, a, M, D, fps, report):
     vlog("gate safe_area:", report["gates"]["safe_area"])
     report["gates"]["text_duration"] = await gate_text_duration(page, D, fps, bool(M.get("loop")))
     vlog("gate text_duration:", report["gates"]["text_duration"])
+    report["gates"]["contrast"] = await gate_contrast(page, D, fps, step=0.1 if thorough(a) else 0.25)
+    vlog("gate contrast:", report["gates"]["contrast"])
 
 
 async def full_render(pw, a, html, fmt, M, D, fps, scale, out, errors):
@@ -626,9 +786,8 @@ async def render_one_format(pw, a, fmt, outdir):
     if a.deliver:  # poster + contact sheet from this page before it closes
         poster = outdir / out_name(stem, fmt, "_poster.png")
         poster.write_bytes(await snap(page, poster_time(M, D)))
-        sheet = await sheet_from_times(page, [D * i / 16 for i in range(16)],
-                                       outdir / out_name(stem, fmt, "_sheet.png"), tw=480, cols=4)
-        deliver = {"format": fmt or "native", "poster": poster, "sheet": sheet}
+        sheet, phone = await deliver_sheets(page, D, outdir, stem, fmt)
+        deliver = {"format": fmt or "native", "poster": poster, "sheet": sheet, "sheet_phone": phone}
     if a.out:
         # one format: -o is used as given; several: each gets its _<fmt> suffix
         out = a.out if len(a.formats) <= 1 else a.out.with_name(out_name(a.out.stem, fmt, a.out.suffix))
@@ -672,7 +831,8 @@ def write_deliver(a, outdir: Path):
     items = []
     for d in a.delivered:
         items.append({"format": d["format"], "video": rel(d["video"]), "poster": rel(d["poster"]),
-                      "sheet": rel(d["sheet"]), **ffprobe_facts(Path(d["video"]))})
+                      "sheet": rel(d["sheet"]), "sheet_phone": rel(d["sheet_phone"]),
+                      **ffprobe_facts(Path(d["video"]))})
     out = outdir / "deliver.json"
     out.write_text(json.dumps({"version": 1, "source": a.html.name, "items": items}, indent=2))
     log(f"delivery bundle ({len(items)} format(s)) -> {out}")
@@ -698,8 +858,11 @@ def build_parser():
     ap.add_argument("--stills", help="comma-separated times (s) to save as PNG")
     ap.add_argument("--sheet", action="store_true", help="save a 4x4 contact sheet of evenly spaced stills")
     ap.add_argument("--check-only", action="store_true",
-                    help="gates only, no video: determinism (8 sampled times, re-seeked shuffled), loop_seam, "
-                         "safe_area (every 0.25 s), text_duration (every frame), page errors")
+                    help="gates only, no video: determinism (8 fixed times from seed 7, re-seeked shuffled), "
+                         "loop_seam, safe_area (every 0.25 s), text_duration (every frame), contrast "
+                         "(every 0.25 s), page errors. A pass is evidence, not proof: only those times are seen")
+    ap.add_argument("--thorough", action="store_true",
+                    help="denser gates (slower): determinism at max(30, 4 per s) times, contrast every 0.1 s")
     ap.add_argument("--skip-checks", action="store_true", help="skip the gates before a full render")
     ap.add_argument("--quiet", action="store_true",
                     help="print only results (output paths, errors, the JSON report): fewer tokens for agents")
@@ -707,7 +870,8 @@ def build_parser():
                     help="comma-separated formats to render in turn: " + ", ".join(FORMATS)
                     + " (default: native MOTION size, no suffix)")
     ap.add_argument("--deliver", action="store_true",
-                    help="full render of every format plus a poster and contact sheet each, and renders/deliver.json")
+                    help="full render of every format plus a poster, contact sheet and phone sheet each, "
+                         "and renders/deliver.json")
     ap.add_argument("--hits", action="store_true",
                     help="write renders/<stem>_hits.json from MOTION.hits (C3) and exit; no render")
     ap.add_argument("--poster", nargs="?", const="", metavar="T",

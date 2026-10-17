@@ -39,6 +39,7 @@ class Golden(unittest.TestCase):
             self.assertTrue(g["loop_seam"].startswith("pass"), (fmt, g["loop_seam"]))
             self.assertEqual(g["safe_area"], "pass", fmt)
             self.assertEqual(g["text_duration"], "pass", fmt)
+            self.assertEqual(g["contrast"], "pass", fmt)
             self.assertEqual(g["page_errors"], "none", fmt)
 
     def test_template_2d_text_gate_sees_the_glyphs(self):
