@@ -52,7 +52,8 @@ the brief's `<start>` and repeat it in the final reply.
 
 ### 3. Build from a template
 The brief's `<renderer>` picks the template.
-`python3 $S/scaffold.py <name> --template <renderer> --formats 9x16,1x1 --duration D`
+`python3 $S/scaffold.py <name> --template <renderer> --formats 9x16,1x1 --duration D` (any renderer
+but `footage`)
 creates `P` with the template (MOTION size, fps, duration set), `kit.js` plus the add-on kits it
 loads, a `brief.md` skeleton (kept if one exists) and `assets/ audio/ docs/ renders/`. Or copy the
 template **and `templates/kit.js`** (plus its add-on kits) into `P` by hand. Then replace the demo scene.

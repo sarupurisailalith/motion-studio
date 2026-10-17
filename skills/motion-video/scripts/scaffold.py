@@ -33,7 +33,16 @@ TEMPLATES = {
               "use": "GSAP: one paused master timeline seeked per frame"},
     "glsl":  {"file": "glsl-composition.html", "vendor": None, "gl": True, "extra": [],
               "use": "fragment shader on one full-frame triangle, uTime from seek(t)"},
+    "zdog":  {"file": "zdog-composition.html", "vendor": "zdog", "gl": False, "extra": ["kit-zdog.js"],
+              "models": ["pip", "parcel"],
+              "use": "Zdog flat-round 3D: characters, mascots, icons, props (read references/zdog.md)"},
+    "p5":    {"file": "p5-composition.html", "vendor": "p5", "gl": False, "extra": ["kit-p5.js"],
+              "use": "p5.js: generative loops, flow fields, glyph type (p5 rules in references/gotchas.md)"},
+    "layered": {"file": "layered-composition.html", "vendor": "p5 zdog", "gl": False,
+                "extra": ["kit-p5.js", "kit-zdog.js", "kit-layers.js"], "models": ["pip", "pine", "round-tree", "rock", "ground-block"],
+                "use": "several engines on one timeline (K.layers), one engine per depth plane"},
 }
+# Not scaffolded: footage (its MOTION comes from transcript/EDL data; follow references/footage.md).
 FORMATS = {"16x9": (1920, 1080), "9x16": (1080, 1920), "1x1": (1080, 1080), "4x5": (1080, 1350)}
 MOTION_RE = re.compile(r"(window\.MOTION\s*=\s*(?:K\.init\()?\{\s*)width:\s*\d+,\s*height:\s*\d+,\s*fps:\s*\d+,\s*duration:\s*[\d.]+")
 
@@ -134,6 +143,8 @@ def main():
     nxt = []
     if tpl["vendor"]:
         nxt.append(f"{S}/vendor.py {proj} {tpl['vendor']}   (downloads {tpl['vendor']} from npm once, into {proj}/vendor/)")
+    if tpl.get("models"):
+        nxt.append(f"{S}/catalog.py use {proj} {' '.join(tpl['models'])}   (the demo's catalog models; swap for your own)")
     nxt.append(f"{S}/render.py {html} --format {','.join(fmts)} --check-only" + (" --gl" if tpl["gl"] else ""))
     print(json.dumps({"project": str(proj), "html": str(html), "template": a.template, "formats": fmts,
                       "fps": fps, "duration": dur, "gl": tpl["gl"], "created": created, "kept": kept, "next": nxt},

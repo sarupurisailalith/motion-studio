@@ -307,13 +307,16 @@ class Scaffold(unittest.TestCase):
         self.assertEqual((p / "kit.js").read_bytes(), (helpers.TEMPLATES / "kit.js").read_bytes())
 
     def test_every_template_scaffolds(self):
-        for tpl in ("2d", "three", "gsap", "glsl"):
+        for tpl in ("2d", "three", "gsap", "glsl", "zdog", "p5", "layered"):
             with self.subTest(template=tpl):
                 root = tmpdir()
                 r = run_script("scaffold.py", "x", "--template", tpl, "--root", root, "--duration", "4.5")
                 self.assertEqual(r.returncode, 0, r.stderr)
                 self.assertIn("duration: 4.5", (root / "x" / "x.html").read_text())
-                self.assertEqual(json.loads(r.stdout)["gl"], tpl in ("three", "glsl"))
+                out = json.loads(r.stdout)
+                self.assertEqual(out["gl"], tpl in ("three", "glsl"))
+                if tpl in ("zdog", "layered"):  # the demo's catalog models are a next step
+                    self.assertTrue(any("catalog.py use" in n for n in out["next"]), out["next"])
 
     def test_keeps_existing_files(self):
         root = tmpdir()
