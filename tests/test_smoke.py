@@ -12,6 +12,20 @@ class Smoke(unittest.TestCase):
         r = helpers.run_script("check.py", "--help")
         self.assertEqual(r.returncode, 0, r.stderr)
 
+    def test_frontmatter(self):
+        """E9.2: CI's frontmatter check passes on the repo and catches a missing block or key."""
+        import frontmatter
+        self.assertEqual(frontmatter.problems(), [])
+        d = helpers.tmpdir()
+        (d / "skills" / "x").mkdir(parents=True)
+        (d / "skills" / "x" / "SKILL.md").write_text("# no frontmatter\n")
+        (d / "commands").mkdir()
+        (d / "commands" / "c.md").write_text("---\nargument-hint: x\n---\nbody\n")
+        bad = frontmatter.problems(d)
+        self.assertEqual(len(bad), 2, bad)
+        self.assertIn("no frontmatter", " ".join(bad))
+        self.assertIn("'description'", " ".join(bad))
+
     def test_parse_report(self):
         self.assertEqual(helpers.parse_report('[render] x\n{\n "a": 1\n}\n'), {"a": 1})
 

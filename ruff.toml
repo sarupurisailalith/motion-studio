@@ -1,0 +1,8 @@
+# Lint config for CI (E9.2). Pinned to syntax errors (E9) and pyflakes (F: unused or undefined
+# names, f-string slips) so a newer ruff can't change what CI checks. The code's own style
+# (several imports per line, small lambdas) is deliberate; formatting is not enforced.
+target-version = "py39"
+line-length = 130
+
+[lint]
+select = ["E9", "F"]

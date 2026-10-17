@@ -6,7 +6,11 @@ Fill every field before writing code. Defaults are fine; blanks are not.
 <inputs>        What to ask the user for, each with a default if skipped:
                 product/brand name, locked copy or transcript, real assets
                 (logo, screenshots, clips, photos), facts file, song (BPM,
-                drop position, licence), references.
+                drop position, licence), references (local video or
+                stills → reference.py + style_guide.md). Domain-standard
+                defaults (recipe ratios, public facts) are allowed when
+                marked [[DEFAULT: confirm or replace]]; the user's own
+                numbers (metrics, prices, results) never are.
 <assets>        Inventory ids from assets/assets.json (ingest.py) mapped to
                 beats: id | kind | beat(s) | role, e.g. "logo | svg | 0–1.5 s,
                 12–15 s | lockup". Supplied assets are used as-is: never
@@ -52,7 +56,8 @@ Fill every field before writing code. Defaults are fine; blanks are not.
                 settings.
 <gotchas>       Known engine traps for this style.
 <verify>        5 s test → render.py --check-only (determinism, loop seam,
-                safe_area, text_duration ≥ 8 frames) → --sheet (one per
+                safe_area, text_duration ≥ 8 frames, contrast ≥ 4.5:1)
+                → --sheet (one per
                 format) → full render per format → check.py (+ --sync
                 sfx_events.json when there are SFX; sync ±20 ms) → show
                 the video; critic rounds only if <review> asks.
@@ -63,4 +68,7 @@ Fill every field before writing code. Defaults are fine; blanks are not.
                 round is appended to critique.md.
 <start>         The approval gate: e.g. "show the beat map and 6 stills
                 before rendering", or "don't ask, decide and keep going".
+                Unattended run: record the decision here, e.g.
+                "unattended: storyboard not signed off; proceeded with
+                9x16,1x1 and the defaults above".
 ```

@@ -1,0 +1,44 @@
+# E9.2: lint, frontmatter check and the full test suite (incl. the E0.2 golden compositions:
+# the template passes every gate and each broken fixture fails exactly the gate it was built to trip).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          ffmpeg -version | head -1
+
+      - name: Python dependencies and Chromium
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install playwright numpy pillow ruff==0.17.1
+          python -m playwright install --with-deps chromium
+
+      - name: Lint (ruff, config in ruff.toml)
+        run: ruff check .
+
+      - name: Frontmatter (every SKILL.md, agent and command)
+        run: python tests/frontmatter.py
+
+      - name: Tests (full suite, renders included)
+        run: tests/run.sh

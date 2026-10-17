@@ -10,7 +10,8 @@ conversation content, and it never sends anything to the author or to any third 
 ## What it reads and writes
 
 - **Reads:** only the files you name or attach (logo, screenshots, fonts, clips, audio, a brand
-  guide, a `brief.md`) and the compositions it builds for you.
+  guide, a `brief.md`, a reference video or stills for `reference.py`) and the compositions it
+  builds for you. `reference.py` analyses local files only and never downloads a reference.
 - **Writes:** only inside your project, under `motion/<slug>/` (brief, assets, composition HTML,
   renders, reports).
 - It does not read Claude's memory, chat history or conversation summaries.

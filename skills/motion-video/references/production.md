@@ -14,8 +14,9 @@
   1. Render a 5 s test first.
   2. Render one still per beat or per major scene and check it as a contact sheet. Some briefs specify a sheet every 0.2 s plus 16–20 fps sheets around each transition.
   3. Scan for single-frame pops: frame-difference spikes 3× their neighbours.
-  4. Measure frozen time, loudness and contrast (4.5:1).
-  5. Compare motion stats against a reference: hard jumps per second and share of still frames.
+  4. Measure frozen time, loudness and contrast (4.5:1): `check.py` and `render.py --check-only` do.
+  5. Compare motion stats against a reference: hard jumps per second and share of still frames
+     (`reference.py`, then `check.py --against`).
 - **Fresh-critic loop:** A fresh reviewer gets the render, brief and QA output. It returns a ranked, timestamped list ending in "ship" or "one more pass", and later reviews check earlier items as fixed, partly fixed or still there. Keep a ledger of each round.
 - **Approval gates:** "Ask me for the inputs, then show the beat map and 4–8 stills before rendering." Also "write the storyboard table (time / on screen / purpose / exit / carried object) before animation."
 - **Parallelism:** Write shared pieces first (palette, fonts, shared 3D models, handoff pixel positions). Then run parallel builders or sub-agents per section or scene. Each scene has its own test page.
