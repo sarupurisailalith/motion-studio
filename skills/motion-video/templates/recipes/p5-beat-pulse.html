@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Recipe — beat pulse (p5 beat visuals)</title>
+<!--
+  RECIPE · beat visuals from DATA, never live audio: rings pulse on every beat of beats.js
+  (beats.py --track song.mp3 --duration D --out P), downbeats hit harder, and MOTION.hits
+  fire flashes that sfx.py turns into sound — picture and sound share one timeline.
+  Without beats.js it falls back to a fixed 120 BPM grid (K.beats), so the recipe renders as is.
+  Needs vendor/p5.min.js, kit.js, kit-p5.js (and beats.js above kit.js when you have a track).
+  Knobs: the ring count, decay (how fast a pulse fades), palette.
+-->
+<style>html,body{margin:0;background:#000;overflow:hidden}#stage{position:absolute;left:0;top:0;overflow:hidden}</style>
+</head>
+<body>
+<div id="stage"></div>
+<script src="vendor/p5.min.js"></script>
+<script src="kit.js"></script>
+<script src="kit-p5.js"></script>
+<script>
+const K = window.K, TAU = Math.PI * 2;
+window.MOTION = K.init({ width: 1080, height: 1080, fps: 30, duration: 4, loop: true });
+const { W, H } = K.FORMAT, D = window.MOTION.duration;
+document.getElementById('stage').style.cssText += `;width:${W}px;height:${H}px`;
+// beat times: from beats.js when present, else a 120 BPM grid (4 s = 2 bars: loops cleanly)
+const B = K.BEATS, grid = K.beats(120);
+const beatTimes = B ? B.beats.filter(t => t >= 0 && t < D) : [...Array(Math.round(D / grid.beat)).keys()].map(i => i * grid.beat);
+const downs = new Set(B ? (B.downbeats || []).map(t => +t.toFixed(4)) : beatTimes.filter((_, i) => i % 4 === 0).map(t => +t.toFixed(4)));
+window.MOTION.hits = beatTimes.filter(t => downs.has(+t.toFixed(4))).map(t => [t, 'downbeat', 'thud']);
+// pulse(t): sum of decaying kicks from every beat at or before t; loop-wrapped so the
+// tail of the last beat continues into frame 0 (seamless)
+const pulse = (t, decay = 7) => beatTimes.reduce((s, b) => {
+  const dt = K.wrap(t - b, D); return s + (downs.has(+b.toFixed(4)) ? 1 : 0.55) * Math.exp(-decay * dt);
+}, 0);
+
+const sk = K.sketch({
+  parent: document.getElementById('stage'), seed: 1,
+  draw: (p, t) => {
+    const k = pulse(t), m = Math.min(W, H);
+    p.background(p.lerpColor(p.color('#111318'), p.color('#2A1810'), Math.min(1, k * 0.6)));
+    p.noFill();
+    for (let i = 0; i < 9; i++) {
+      const r = m * (0.12 + 0.085 * i) * (1 + 0.06 * k * (1 - i / 9));
+      p.stroke(255, 90 + 40 * i, 60, 255 * (0.25 + 0.75 * Math.min(1, k) * (1 - i / 10)));
+      p.strokeWeight(2 + 6 * k * (1 - i / 9));
+      p.circle(W / 2, H / 2, 2 * r);
+    }
+    p.noStroke(); p.fill(255, 200, 120);
+    p.circle(W / 2, H / 2, m * (0.08 + 0.05 * k));
+  },
+});
+window.ready = sk.ready;
+window.seek = t => sk.seek(t);
+if (!new URLSearchParams(location.search).has('render')) {
+  sk.ready.then(() => { const t0 = performance.now(); const tick = async () => { await window.seek(K.wrap((performance.now() - t0) / 1000, D)); requestAnimationFrame(tick); }; tick(); });
+}
+</script>
+</body>
+</html>

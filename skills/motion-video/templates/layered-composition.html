@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Motion Composition — layered (p5 + Zdog + DOM)</title>
+<!--
+  MOTION STUDIO — layered multi-engine template: several engines on ONE timeline.
+  Layers (back → front): p5 sky + mist  →  Zdog forest with Pip  →  DOM type.
+  Set up the project folder P:
+    python3 scripts/vendor.py P zdog p5
+    python3 scripts/catalog.py use P pip pine round-tree rock ground-block
+    cp templates/layered-composition.html templates/kit-p5.js templates/kit-layers.js P/
+  Render: python3 scripts/render.py P/<slug>.html --format 16x9,9x16 (add --gl only with a WebGL layer).
+
+  K.layers([...]) stacks the layers (first = back), builds window.ready / window.seek and seeks
+  every layer for the same t. Rules: one engine per depth plane (p5 atmosphere → Zdog
+  characters → Three hero → DOM type); no shared depth between layers (nothing passes behind
+  and in front of another layer); at most one WebGL layer. Each engine keeps its own rules
+  (references/zdog.md, gotchas.md "p5.js"). Canvas-drawn text gets a K.proxy box so the gates see
+  it (the sky title below). Preview over http (p5 + file loads): python3 -m http.server in P.
+-->
+<style>
+  :root{
+    --ink:#F4F1E4;   /* the caption sits on the dark bank */
+    --font-display: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  html,body{margin:0;height:100%;background:#000;overflow:hidden}
+  #stage{position:absolute;left:0;top:0;transform-origin:0 0;overflow:hidden;background:#EAF2E3}
+  #type{pointer-events:none}
+  #cap{position:absolute;left:0;top:0;font:800 60px/1 var(--font-display);color:var(--ink);letter-spacing:-.02em;
+       white-space:nowrap;opacity:0}
+  #preview-ui{position:fixed;left:0;right:0;bottom:0;height:28px;display:flex;gap:8px;align-items:center;
+      padding:0 10px;background:rgba(0,0,0,.6);color:#fff;font:12px ui-monospace,monospace;z-index:999}
+  #preview-ui input{flex:1}
+  #safe-overlay{position:absolute;left:0;top:0;pointer-events:none;display:none;z-index:998}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="type"><div id="cap" data-safe data-text>Into the woods</div></div>
+</div>
+<script src="vendor/p5.min.js"></script>
+<script src="vendor/zdog.dist.min.js"></script>
+<script src="kit.js"></script>
+<script src="kit-p5.js"></script>
+<script src="kit-zdog.js"></script>
+<script src="kit-layers.js"></script>
+<script src="models/pip.js"></script>
+<script src="models/pine.js"></script>
+<script src="models/round-tree.js"></script>
+<script src="models/rock.js"></script>
+<script src="models/ground-block.js"></script>
+<script>
+const K = window.K, TAU = Zdog.TAU;
+
+/* =========================================================================
+   COMPOSITION SETTINGS
+   ========================================================================= */
+window.MOTION = K.init({ width: 1920, height: 1080, fps: 30, duration: 6, loop: true,
+  hits: [[1.15, 'hop', 'whoosh'], [1.65, 'land', 'thud'], [3.4, 'wave', 'pop']] });
+const { W, H } = K.FORMAT, D = window.MOTION.duration;
+
+/* =========================================================================
+   SCENE — replace with the real piece. Keep every value derived from t.
+   ========================================================================= */
+const stage = document.getElementById('stage'), cap = document.getElementById('cap');
+stage.style.width = W + 'px'; stage.style.height = H + 'px';
+const S = K.safe.ui;
+const L = K.pick({ '9x16': { zoom: 5.6, feet: 0.64, cap: 68, title: 84 }, '4x5': { zoom: 5.6, feet: 0.64, cap: 60, title: 80 },
+                   default: { zoom: 4.6, feet: 0.7, cap: 60, title: 88 } });
+const C = { skyTop: '#CFE6E9', skyLow: '#F4F1E4', sun: '#FFF6DA', mist: '#FFFFFF', title: '#2F5A4C' };
+const out = K.bezier(.16, 1, .3, 1), io = K.bezier(.45, 0, .15, 1);
+
+// ---- layer 1 (back): p5 sky, sun and drifting mist (atmosphere) + a canvas-drawn title ----
+const title = K.proxy('sky-title', null);            // gate-visible box for the canvas text (E10.13)
+const sky = K.sketch({
+  parent: stage, seed: 3,
+  draw: (p, t) => {
+    const g = p.drawingContext, grad = g.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, C.skyTop); grad.addColorStop(1, C.skyLow);
+    g.fillStyle = grad; g.fillRect(0, 0, W, H);
+    p.noStroke(); p.fill(C.sun); p.circle(W * 0.72, S.y + S.h * 0.18, Math.min(W, H) * 0.16);
+    // mist: soft bands whose edges are loop-periodic noise (K.loopNoise: seamless at t = D)
+    const n = K.loopNoise(t, D, 0.5);
+    for (let b = 0; b < 3; b++) {
+      p.fill(255, 255, 255, 70 - b * 15);
+      p.beginShape();
+      p.vertex(0, H);
+      for (let x = 0; x <= W; x += 24) {
+        const y = H * (0.42 + 0.08 * b) + 60 * (p.noise(x * 0.0016 + n.x + b * 7, n.y + b * 3) - 0.5);
+        p.vertex(x, y);
+      }
+      p.vertex(W, H);
+      p.endShape(p.CLOSE);
+    }
+    // the title is drawn on the canvas, so a K.proxy box carries it to the gates
+    const a = out(K.seg(t, 0.2, 0.9)) * (1 - K.ease.inCubic(K.seg(t, 5.2, 5.7)));
+    p.textFont(getComputedStyle(document.documentElement).getPropertyValue('--font-display'));
+    p.textStyle(p.BOLD); p.textSize(L.title); p.textAlign(p.CENTER, p.BASELINE);
+    const tx = S.x + S.w / 2, ty = Math.round(S.y + L.title * 1.2 + (1 - a) * 20);
+    p.fill(47, 90, 76, 255 * a);
+    p.text('Pip goes walking', tx, ty);
+    title.set(K.textBox(g, 'Pip goes walking', tx, ty), a > 0.02 ? a : 0);
+  },
+});
+
+// ---- layer 2: Zdog forest diorama with Pip (characters) ----
+const zctx = K.Z.canvas(W, H).getContext('2d');
+const scene = new Zdog.Anchor(), cam = K.Z.camera(scene);
+const B = K.Z.LAYERS;
+const ground = K.Z.make('ground-block', cam.world, { width: 900, depth: 70, height: 160, translate: { y: 0 } });
+K.Z.layer(ground.root, B.STAGE);
+const back = new Zdog.Anchor({ addTo: cam.world, translate: { z: -60 } });
+for (let i = 0; i < 16; i++) {                       // a seeded tree line on the back of the bank
+  const x = -420 + i * 56 + 20 * K.rand(21, i), s = 0.9 + 0.5 * K.rand(22, i);
+  K.Z.make(K.rand(24, i) < 0.55 ? 'pine' : 'round-tree', back, { translate: { x, z: -8 + 16 * K.rand(23, i) }, scale: s });
+}
+K.Z.layer(back, B.MID);
+const rock = K.Z.make('rock', cam.world, { translate: { x: 70, z: 6 }, scale: 1.2, seed: 4 });   // Pip stands on it at y −18
+K.Z.layer(rock.root, B.STAGE + 1000);
+const pip = K.Z.make('pip', cam.world, { translate: { x: -60 } });
+const shadow = K.Z.shadow(pip.joints.root, () => 0, { bias: B.SHADOW, diameter: 32 });
+const rig = K.Z.rig(pip.joints);
+const view = { zoom: L.zoom, cx: S.x + S.w / 2, cy: S.y + S.h * L.feet };
+
+function poseForest(t) {
+  cam.set({ yaw: 0.28 + 0.06 * Math.sin(TAU * t / D), pitch: 0.16, level: true });   // diorama: keep the bank level
+  // Pip walks to the rock, hops onto it, waves, hops down and walks back (the loop seam)
+  pip.root.translate.x = K.track([[0, -60], [0.4, -60], [1.1, 30, K.ease.inOutCubic], [1.15, 30], [1.65, 70],
+    [4.2, 70], [4.7, 30], [5.4, -60, K.ease.inOutCubic]], t, K.ease.linear);
+  pip.root.rotate.y = K.track([[0, -TAU / 4], [3.0, -TAU / 4], [3.3, -0.28, io], [4.0, -0.28], [4.25, TAU / 4, io],
+    [5.45, TAU / 4], [5.8, -TAU / 4, io]], t);
+  pip.root.translate.y = K.track([[1.15, 0], [1.65, -18], [4.2, -18], [4.7, 0]], t, K.ease.linear);   // rock top, over each hop's air time
+  rig.pose(t, [
+    { clip: 'idle', period: D / 3 },
+    { clip: 'run', at: 0.4, until: 1.1, in: 0.1, out: 0.15, stride: 0.36, legs: 0.6, arms: 0.6 },
+    { clip: 'hop', at: 1.03, h: 26, air: 0.5, pre: 0.12, land: 0.18 },   // lands at 1.65 on the rock (y −18)
+    { clip: 'wave', at: 3.3, len: 1.0 },
+    { clip: 'hop', at: 4.08, h: 14, air: 0.5, pre: 0.12, land: 0.14 },
+    { clip: 'run', at: 4.8, until: 5.4, in: 0.1, out: 0.15, stride: 0.36, legs: 0.6, arms: 0.6 },
+  ]);
+  pip.blink(t, [2.4]);
+  shadow.update();
+}
+
+// ---- layer 3 (front): DOM type ----
+function poseType(t) {
+  const p = out(K.seg(t, 2.6, 3.2)) * (1 - K.ease.inCubic(K.seg(t, 4.6, 5.0)));
+  cap.style.opacity = p > 0.02 ? Math.min(1, p * 1.2) : 0;
+  cap.style.transform = `translate(${Math.round(S.x + S.w / 2 - cap.offsetWidth / 2)}px,${Math.round(S.y + S.h - L.cap * 1.5 + (1 - p) * 24)}px)`;
+}
+
+K.layers([
+  { name: 'sky', el: () => sky.canvas, ready: sky.ready, seek: t => sky.seek(t) },
+  { name: 'forest', el: zctx.canvas, seek: t => { poseForest(t); K.Z.render(scene, zctx, view); } },
+  { name: 'type', el: document.getElementById('type'),
+    ready: (async () => { cap.style.fontSize = L.cap + 'px'; if (document.fonts) await document.fonts.ready; })(),
+    seek: poseType },
+]);
+
+/* =========================================================================
+   RUNTIME (shared — normally no edits needed below)
+   ========================================================================= */
+const params = new URLSearchParams(location.search);
+const RENDER_MODE = params.has('render');
+
+// window.ready / window.seek come from K.layers above.
+
+function fit() {
+  if (RENDER_MODE) { stage.style.transform = 'none'; return; }
+  const s = Math.min(innerWidth / W, (innerHeight - 28) / H);
+  stage.style.transform = `translate(${(innerWidth - W * s) / 2}px,${(innerHeight - 28 - H * s) / 2}px) scale(${s})`;
+}
+addEventListener('resize', fit); fit();
+
+if (!RENDER_MODE) {
+  // Preview player (never used by the renderer): Space, ←/→, scrub, F formats, G safe areas
+  const ui = document.createElement('div'); ui.id = 'preview-ui';
+  ui.innerHTML = `<button id="pp">❚❚</button><input id="sc" type="range" min="0" step="0.001"><span id="tc"></span><span>${K.FORMAT.name} ${W}×${H} · F format · G safe</span>`;
+  document.body.appendChild(ui);
+  const fps = window.MOTION.fps, sc = ui.querySelector('#sc'), tc = ui.querySelector('#tc');
+  sc.max = D;
+  let playing = !params.has('t'), t0 = performance.now(), base = parseFloat(params.get('t') || 0);
+  const show = t => { window.seek(t); sc.value = t; tc.textContent = t.toFixed(3) + 's / f' + Math.round(t * fps); };
+  const tick = () => { if (playing) show(K.wrap(base + (performance.now() - t0) / 1000, D)); requestAnimationFrame(tick); };
+  const setPlay = p => { playing = p; base = +sc.value; t0 = performance.now(); ui.querySelector('#pp').textContent = p ? '❚❚' : '▶'; };
+  ui.querySelector('#pp').onclick = () => setPlay(!playing);
+  sc.oninput = () => { setPlay(false); show(+sc.value); };
+  const NS = 'http://www.w3.org/2000/svg', ov = document.createElementNS(NS, 'svg');
+  ov.id = 'safe-overlay'; ov.setAttribute('width', W); ov.setAttribute('height', H);
+  [['title', '#00a3ff', '14 10'], ['ui', '#ff2bd6', '']].forEach(([name, color, dash]) => {
+    const r = K.safe[name], el = document.createElementNS(NS, 'rect');
+    Object.entries({ x: r.x, y: r.y, width: r.w, height: r.h, fill: 'none', stroke: color, 'stroke-width': 3, 'stroke-dasharray': dash })
+      .forEach(([k, v]) => el.setAttribute(k, v));
+    ov.appendChild(el);
+  });
+  stage.appendChild(ov);
+  addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.code === 'Space') setPlay(!playing);
+    if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') { setPlay(false); show(K.clamp(+sc.value + (e.code === 'ArrowRight' ? 1 : -1) / fps, 0, D)); }
+    if (e.key === 'g' || e.key === 'G') ov.style.display = ov.style.display === 'block' ? 'none' : 'block';
+    if (e.key === 'f' || e.key === 'F') location.search = K.formatSearch(K.nextFormat());
+  });
+  window.ready.then(() => { show(base); tick(); });
+}
+</script>
+</body>
+</html>

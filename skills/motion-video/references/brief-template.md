@@ -6,12 +6,28 @@ Fill every field before writing code. Defaults are fine; blanks are not.
 <inputs>        What to ask the user for, each with a default if skipped:
                 product/brand name, locked copy or transcript, real assets
                 (logo, screenshots, clips, photos), facts file, song (BPM,
-                drop position, licence), references.
+                drop position, licence), references (local video or
+                stills → reference.py + style_guide.md). Domain-standard
+                defaults (recipe ratios, public facts) are allowed when
+                marked [[DEFAULT: confirm or replace]]; the user's own
+                numbers (metrics, prices, results) never are.
 <assets>        Inventory ids from assets/assets.json (ingest.py) mapped to
                 beats: id | kind | beat(s) | role, e.g. "logo | svg | 0–1.5 s,
                 12–15 s | lockup". Supplied assets are used as-is: never
                 redrawn, recoloured or replaced by a drawn stand-in. None
                 supplied → say so; never invent UI, logos or numbers.
+                zdog / layered: list the catalog models used ("catalog:pip |
+                character | 0–6 s | hero"); search catalog.py first, and
+                mark anything modelled new as "new: <what>".
+<footage>       Only for a footage-led piece (someone talking on camera → a new
+                edit; read references/footage.md). renderer: footage. Clip id(s)
+                from assets.json, the script or "faster-whisper", the facts
+                file (docs/source.md: one fact per line with its origin), the
+                speaker's name/role as it may appear on screen, face focus
+                point, cut policy (fillers, pauses > 0.6 s, retakes; user
+                approves the cut list), speaker layouts per role, captions
+                on/off. story.json (roles, claims, cues on word ids) is signed
+                off with the storyboard.
 <deliverable>   Duration (exact, e.g. 20.00 s), resolution and aspect(s),
                 fps, loop yes/no, MP4 plus editable source, file-size cap,
                 sound on/off.
@@ -21,12 +37,24 @@ Fill every field before writing code. Defaults are fine; blanks are not.
                 product, type ≈ the 1x1 size"). Safe-area rule: text elements carry
                 data-safe data-text and stay inside K.safe.ui (9x16 reserves
                 top 12 %, bottom 22 %, right 14 % for platform UI).
+<renderer>      One of (list grows; footage etc. may be added):
+                  2d       DOM / SVG / Canvas 2D: type, UI, most motion graphics
+                  zdog     flat-round 3D: characters, mascots, icons, props,
+                           friendly explainers (references/zdog.md)
+                  p5       generative loops, flow fields, glyph-driven type
+                           (gotchas.md "p5.js")
+                  three    product realism, lighting, perspective (--gl)
+                  layered  a mix: one engine per depth plane, e.g. p5
+                           atmosphere → zdog characters → DOM type
+                Default 2d. Pick the simplest engine that carries the concept.
 <concept>       ONE line: the formal idea or central visual rule, e.g. "one
                 shape never cut", "the baseline is a trajectory", "the
                 whole film happens inside the wordmark's period".
 <art direction> Palette as hex with a role for each colour (bg / primary
                 type / accent / secondary). Fonts with weights, tracking,
-                min size. Texture (grain, paper, glass). Composition rules
+                min size. With brand assets: the brand.py swatch the user
+                confirmed, e.g. "Brand confirmed (brand.json): bg #0e0f12,
+                ink #f3f1ec, accent #ff4d1f; display Acme Grotesk 800". Texture (grain, paper, glass). Composition rules
                 (safe margins in px, subject fills frame, negative space).
                 Camera vocabulary.
 <banned>        A concrete list of effects and clichés to avoid.
@@ -52,7 +80,8 @@ Fill every field before writing code. Defaults are fine; blanks are not.
                 settings.
 <gotchas>       Known engine traps for this style.
 <verify>        5 s test → render.py --check-only (determinism, loop seam,
-                safe_area, text_duration ≥ 8 frames) → --sheet (one per
+                safe_area, text_duration ≥ 8 frames, contrast ≥ 4.5:1)
+                → --sheet (one per
                 format) → full render per format → check.py (+ --sync
                 sfx_events.json when there are SFX; sync ±20 ms) → show
                 the video; critic rounds only if <review> asks.
@@ -63,4 +92,7 @@ Fill every field before writing code. Defaults are fine; blanks are not.
                 round is appended to critique.md.
 <start>         The approval gate: e.g. "show the beat map and 6 stills
                 before rendering", or "don't ask, decide and keep going".
+                Unattended run: record the decision here, e.g.
+                "unattended: storyboard not signed off; proceeded with
+                9x16,1x1 and the defaults above".
 ```

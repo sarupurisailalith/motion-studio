@@ -1,0 +1,56 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Recipe — p5 WEBGL + strands shader loop</title>
+<!--
+  RECIPE · 3D generative loop in p5 WEBGL: lights, a perspective orbit camera and a p5.strands
+  shader (JS-authored: getWorldInputs bends the vertices, getPixelInputs colours them) driven by
+  a uniform that is a pure function of t. RENDER WITH --gl (SwiftShader); measured deterministic
+  with a clean loop seam (docs/perf.md: ~4 frames/s at 1080x1080 with 4 workers).
+  Needs vendor/p5.min.js, kit.js, kit-p5.js. Instance mode: modify(({ p5 }) => …, { p5: p }).
+  WebGPU (vendor.py P p5-webgpu) stays experimental: not validated under the gates.
+-->
+<style>html,body{margin:0;background:#000;overflow:hidden}#stage{position:absolute;left:0;top:0}</style></head>
+<body><div id="stage"></div>
+<script src="vendor/p5.min.js"></script>
+<script src="kit.js"></script>
+<script src="kit-p5.js"></script>
+<script>
+const K = window.K, TAU = Math.PI * 2;
+window.MOTION = K.init({ width: 1080, height: 1080, fps: 30, duration: 4, loop: true });
+const { W, H } = K.FORMAT, D = window.MOTION.duration;
+let wobble, phase = 0;   // phase is set from t before every draw; the shader reads it as a uniform
+const sk = K.sketch({
+  parent: document.getElementById('stage'), renderer: 'webgl', seed: 1,
+  setup: async p => {
+    wobble = p.baseMaterialShader().modify(({ p5 }) => {
+      const ph = p5.uniformFloat(() => phase);
+      p5.getWorldInputs(inputs => {
+        const k = p5.sin(inputs.position.y * 0.03 + ph) * 18;
+        inputs.position.x += k * 0.5; inputs.position.z += k;
+        return inputs;
+      });
+      p5.getPixelInputs(inputs => {
+        inputs.color = [0.5 + 0.5 * p5.sin(ph + inputs.texCoord.x * 6.283), 0.35, 0.9 - 0.4 * inputs.texCoord.y, 1];
+        return inputs;
+      });
+    }, { p5: p });
+  },
+  draw: (p, t) => {
+    phase = TAU * t / D;
+    p.background('#101418');
+    const a = TAU * t / D;
+    p.camera(Math.sin(a) * 520, -180, Math.cos(a) * 520, 0, 0, 0, 0, 1, 0);
+    p.perspective(Math.PI / 4, W / H, 10, 3000);
+    p.ambientLight(60); p.directionalLight(255, 240, 220, -0.5, 0.8, -0.6); p.pointLight(120, 160, 255, 300, -200, 300);
+    p.noStroke();
+    p.shader(wobble);
+    p.sphere(150, 48, 32);
+    p.resetShader();
+    p.push(); p.translate(0, 190, 0); p.specularMaterial(200); p.shininess(30); p.box(420, 12, 420); p.pop();
+  },
+});
+window.ready = sk.ready;
+window.seek = t => sk.seek(t);
+if (!new URLSearchParams(location.search).has('render')) {
+  sk.ready.then(() => { const t0 = performance.now(); const tick = async () => { await window.seek(K.wrap((performance.now() - t0) / 1000, D)); requestAnimationFrame(tick); }; tick(); });
+}
+</script></body></html>

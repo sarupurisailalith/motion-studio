@@ -3,6 +3,87 @@
 All notable changes to Motion Studio. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/). Backlog ids (E…) refer to the project backlog.
 
+## [0.3.0] — 2026-10-18
+
+Footage-led videos, two new engines (Zdog, p5.js), a brand kit, faster renders and more QA gates.
+Every v0.2 command line and composition works as before; no new network access at render time.
+
+### Added
+- **Footage-led videos** (a talking clip recut with graphics; brief `<footage>`, `renderer: footage`):
+  - `ingest.py` keeps a clip's own sound as a linked `<id>-audio` WAV (48 kHz), sample-aligned to
+    frame 0; `--clip-max-dim`; `--clip-fps` defaults to the piece's fps; variable-frame-rate footage
+    is resampled to a constant rate.
+  - `transcribe.py`: word timings (faster-whisper if installed, optional), script alignment or a
+    phrases-only fallback; fillers and long pauses listed; `--snap beats.json` puts voice-over
+    phrases on beats without stretching (`vo.wav` + `vo.json`).
+  - `cut.py`: `suggest` (an edit list from fillers, pauses and retakes), `voice` (the voice stem
+    from the same edit list, crossfaded cuts, `--clean` high-pass, denoise and loudness match),
+    `sync` (A/V sync per segment).
+  - `story.py` checks `story.json` cues and on-screen claims against the transcript, the edit list
+    and `docs/source.md`.
+  - `templates/kit-footage.js` (edit-list playback, word-timed cues, captions, lower third, keyword
+    pop, stat card, feature list, pull quote, CTA card, speaker layouts) and
+    `templates/footage-composition.html`; `references/footage.md`.
+  - Windowed clip loading for long clips (`K.loadClip(a, {window})`, `K.clipSeek`, `K.clipStats`).
+  - Gates: `cue_timing` and `claim_trace` in `render.py --check-only` for footage pieces;
+    `check.py --edl` adds `av_sync`.
+- **Zdog engine**: `vendor.py zdog` (zdog 1.1.3 + zfont 1.2.8), `templates/zdog-composition.html`,
+  `kit-zdog.js` (`K.Z`: render with canonical sort, project, camera, depth layers, squash, shadow,
+  extrude, shade), a character rig with 11 clips (idle, anticipate, hop, leap, land, run, wave,
+  point, turn-to-camera, drop-in, spin-reveal), and `references/zdog.md`.
+- **Model catalog**: 17 original Zdog models (characters, props, scenery, icons), `catalog.json`,
+  `catalog.py` (search / use / turntable / previews), preview stills and a "search the catalog
+  first" rule.
+- **p5.js engine**: `vendor.py p5` (p5.js 2.3.4, LGPL-2.1, downloaded unmodified per project),
+  `templates/p5-composition.html`, `kit-p5.js` (`K.sketch`, `K.loopNoise`, `K.presim`), p5
+  determinism rules in `gotchas.md`.
+- **Layered template** (`templates/layered-composition.html`, `K.layers`) and `K.proxy` /
+  `K.textBox` so the gates see canvas-drawn text.
+- **More templates**: `gsap-composition.html` (one paused master timeline) and
+  `glsl-composition.html` (fragment shader, `uTime` from `seek`). Engine recipes in
+  `templates/recipes/` and kit examples in `templates/examples/`.
+- Brief `<renderer>` field (2d | gsap | glsl | zdog | p5 | three | layered | footage); `/motion`,
+  `scaffold.py` and SKILL.md pick the template from it.
+- **Brand kit**: `brand.py` builds `brand.json` from local brand files (ranked palette, fonts,
+  wordmark, guide colours and copy from text, or PDF via optional pypdf / pdftotext) plus a swatch
+  image; `/motion`, `/motion-brief` and `/motion-assets` show it for confirmation before building.
+- **Kit**: spring presets `K.SPRING.snappy|ui|soft|camera`, `K.wobble` / `K.squash`; images
+  `K.cover` / `K.crop` and device frames `K.device` / `K.drawDevice`; typography `K.glyphs`,
+  `K.layoutText` / `K.drawGlyphs`, `K.fitText`, `K.rise` / `K.maskRise`, `K.typed`, `K.scramble`.
+- `scaffold.py` (a project folder from a template) and `doctor.py` (checks dependencies and prints
+  install commands; installs nothing).
+- **Audio**: presets `scrape`, `whoomp`, `crackle`, `creak`, `splash`, `rustle`, `chime`, `zip`,
+  `sizzle` (`crackle` / `sizzle` are seamless beds with `loop: true`); project palettes via
+  `sfx.register` in a palette file loaded with `--palette` (never run implicitly); `sfx.py --samples DIR` places supplied
+  takes on the hits; `sfx_events.json` records `transient` and `source`.
+- **Reference analysis**: `reference.py` studies a local reference video or stills (cuts, shot
+  lengths, motion stats; never downloads), `references/style_guide.md`, and `check.py --against`
+  for a pacing WARN.
+- `contrast` gate: visible `[data-text]` must reach 4.5:1 against the rendered pixels behind it.
+- `render.py --thorough` (denser determinism and contrast sampling).
+- CI workflow (ruff, frontmatter check, full test suite), `ruff.toml` and `CREDITS.md`.
+
+### Changed
+- **Faster rendering, same pixels**: frames are captured over CDP (about 1.8× on one worker for DOM
+  pages), and a page that is one full-frame `<canvas>` is read straight from the canvas after a
+  pixel check (2–3× on 2D-canvas pages, about 1.3× for Three.js under `--gl`). `--capture
+  screenshot` restores the v0.2 path.
+- `--workers` defaults to the CPU count (max 6); a frame-count gate fails a render with a missing
+  or duplicated frame.
+- Render cache: a rerun with unchanged page files and flags (e.g. only `--audio` changed) reuses
+  `renders/.cache/` and only re-muxes; `--no-cache` always renders.
+- `check.py` `frozen` gate measures local motion (any 40 px region at 320 px over 0.1 s), so small
+  or slow movers no longer read as still.
+- `mix.py --duration` defaults from `renders/deliver.json` or `renders/*_hits.json`.
+- `--deliver` also writes `_sheet_phone.png` (`sheet_phone` in `deliver.json`); `--sheet` without
+  `--stills` writes its stills to `renders/stills/`.
+- `/motion` uses `scaffold.py` and `doctor.py`; docs on flagged domain defaults, the platform-UI
+  bands, critic fixes vs. `K.safe.ui`, and recording unattended sign-off in `<start>`.
+
+### Fixed
+- `render.py` no longer reports a cancelled request as a page error when the same URL then loads
+  (p5 `loadFont`), and the local server no longer prints a traceback for cancelled requests.
+
 ## [0.2.2] — 2026-10-15
 
 Directory-submission readiness. No change to commands, compositions or render output.

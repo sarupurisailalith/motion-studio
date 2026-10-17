@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>p5 rules fixture</title>
+<!--
+  p5.js 2.x inside the Motion Studio contract (spike).
+  Instance mode + noLoop(): seek(t) sets the time and calls redraw(); draw() reads only T.
+  Seeded per frame (randomSeed at the top of draw), loop-periodic noise (circle in noise space).
+  Tests flip NAIVE to true (frameCount, unseeded random()) and expect the gates to fail.
+  loadFont fetches the font twice and cancels the first request (E10.8: not a page error).
+-->
+<style>html,body{margin:0;background:#000;overflow:hidden} main{position:absolute;left:0;top:0}</style>
+</head>
+<body>
+<main id="host"></main>
+<script src="vendor/p5.min.js"></script>
+<script src="kit.js"></script>
+<script>
+const NAIVE = false;   // true: frameCount for motion, random() never re-seeded (typical p5 sketch habits)
+const K = window.K, TAU = Math.PI * 2;
+window.MOTION = K.init({ width: 1080, height: 1080, fps: 30, duration: 6, loop: true });
+const { width: W, height: H } = window.MOTION, D = window.MOTION.duration;
+let T = 0, P = null, font = null, glyphPts = [], resolveReady;
+window.ready = new Promise(r => (resolveReady = r));
+
+new p5(p => {
+  P = p;
+  p.setup = async () => {
+    p.pixelDensity(window.devicePixelRatio || 1);
+    p.createCanvas(W, H).parent('host');
+    p.noLoop();
+    p.noiseSeed(11);
+    font = await p.loadFont('assets/display.ttf');            // 2.x: promises, no preload()
+    p.textSize(150);   // 2.x: textToPoints reads textSize(), it takes no size argument
+    glyphPts = font.textToPoints('p5 × motion', W / 2 - 400, H / 2 + 40, { sampleFactor: 0.18 });
+    resolveReady();
+  };
+  p.draw = () => {
+    if (!NAIVE) p.randomSeed(7);                               // same t -> same random() sequence
+    const ph = TAU * (NAIVE ? p.frameCount / 180 : T / D);     // loop phase
+    const cx = Math.cos(ph) * 0.6, cy = Math.sin(ph) * 0.6;    // circle in noise space: periodic over D
+    p.background('#101418');
+
+    // flow field: each line is integrated from a seeded start INSIDE this frame (no state across frames)
+    p.noFill(); p.strokeWeight(2);
+    for (let i = 0; i < 260; i++) {
+      let x = K.rand(1, i) * W, y = K.rand(2, i) * H;
+      p.stroke(p.lerpColor(p.color('#2de2c4'), p.color('#ff5a3c'), K.rand(3, i)));
+      p.beginShape();
+      for (let s = 0; s < 40; s++) {
+        p.vertex(x, y);
+        const a = p.noise(x * 0.0022 + cx, y * 0.0022 + cy, 0.5) * TAU * 2;
+        x += Math.cos(a) * 6; y += Math.sin(a) * 6;
+      }
+      p.endShape();
+    }
+
+    // kinetic type from glyph outlines: points breathe with loop-periodic noise
+    p.noStroke(); p.fill('#f3efe6');
+    for (const q of glyphPts) {
+      const n = p.noise(q.x * 0.01 + cx * 2, q.y * 0.01 + cy * 2, 3.3) - 0.5;
+      p.circle(q.x + n * 18, q.y + n * 18, 4 + 3 * (0.5 + 0.5 * Math.sin(ph * 2 + q.x * 0.02)));
+    }
+
+    // sparkles: random() — only deterministic because of randomSeed above
+    p.fill('#ffffff');
+    for (let i = 0; i < 40; i++) {
+      const sx = p.random(W), sy = p.random(H), tw = 0.5 + 0.5 * Math.sin(ph * 3 + p.random(TAU));
+      p.circle(sx, sy, 2 + 4 * tw);
+    }
+  };
+});
+
+window.seek = async t => { await window.ready; T = t; P.redraw(); };
+
+if (!new URLSearchParams(location.search).has('render')) {
+  window.ready.then(() => { const t0 = performance.now(); const tick = () => { window.seek(((performance.now() - t0) / 1000) % D); requestAnimationFrame(tick); }; tick(); });
+}
+</script>
+</body>
+</html>

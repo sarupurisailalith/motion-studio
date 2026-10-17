@@ -1,6 +1,6 @@
 # Local assets: intake and use
 
-`scripts/ingest.py PROJECT PATH... [--attached] [--max-dim 3840] [--clip-fps 30]` copies files
+`scripts/ingest.py PROJECT PATH... [--attached] [--max-dim 3840] [--clip-max-dim N] [--clip-fps N]` copies files
 and folders (or Claude app chat uploads, with `--attached`) into the project. Nothing is
 referenced in place, so the project folder renders anywhere. Re-running merges by original path.
 Exit 1 means a file was `missing` or `unreadable`. Those are listed by name in the summary JSON.
@@ -19,8 +19,8 @@ to the project), `source` (`local`|`attached`) and `orig`. Look up assets by id,
 | image | PNG, JPEG and WebP kept. TIFF, BMP, GIF (first frame), HEIC/AVIF → PNG. EXIF rotation applied. Long side capped at `--max-dim`. | `w h alpha` |
 | svg | Sanitised: scripts, `on*` handlers, `<foreignObject>`, external `href`/`url()`/`@import` and DTD entities removed. Shapes kept. | `w h` |
 | font | TTF/OTF/WOFF/WOFF2 checked; name read from the font. | `family style weight` |
-| video | Decoded to a JPEG frame sequence at `--clip-fps` | `w h fps frame_count duration pattern` |
-| audio | → 48 kHz stereo 16-bit WAV | `duration sr` |
+| video | Decoded to a JPEG frame sequence at `--clip-fps` (default: the piece's fps from MOTION or brief.md, else 30; variable-rate footage is resampled to a constant rate). Long side capped at `--clip-max-dim` (default `--max-dim`). Its sound becomes an `audio` entry `<id>-audio`, sample-aligned to frame 0 | `w h fps frame_count duration pattern audio` |
+| audio | → 48 kHz stereo 16-bit WAV (a clip's own sound also has `of`: the clip id) | `duration sr` |
 | doc | PDF/TXT/etc. copied (an unknown type is stored as a doc with a note) | — |
 
 ## Using each kind in a composition
@@ -31,6 +31,14 @@ For a weight that was never ingested the browser fakes bold. Don't rely on that.
 
 **Images.** `<img src="assets/images/hero-shot.png">`. Await every image in `window.ready`
 (`img.decode()`). Size boxes from `w/h` so nothing reflows when the image arrives.
+Place them with the kit, which only crops and scales: `K.cover(ctxOrEl, img, box, {fx, fy, zoom,
+radius})` fills a box around a focal point (animate `fy` to scroll a long screenshot);
+`{fit: 'contain'}` never crops (logos); `K.crop(target, img, {x, y, w, h}, box)` shows one region.
+
+**Screens in devices.** CSS-built frames, no images: `const d = K.device('phone', {w, h, theme})`
+once in layout, move `d.el`, then `K.cover(d.screen, img)`. Canvas: `K.drawDevice(ctx, 'browser',
+box, {url}, s => K.cover(ctx, img, s))`. Kinds: `browser` (neutral chrome, URL pill) and
+`phone`. Put only the user's own URL in the pill. See `templates/examples/device-demo.html`.
 
 **SVG.** Use `<img src="assets/svg/logo.svg">` for a static mark, or inline the file's markup
 when you need to animate parts of it (stroke draw, per-path reveals). The file is already
@@ -45,17 +53,40 @@ window.ready = (async () => { await K.loadClip(clip); /* fonts, images … */ })
 K.drawClip(ctx, clip, t - clipStart, x, y, w, h);   // or K.clipFrame(clip, t) → <img>
 ```
 
+Clips longer than ~20 s: `K.loadClip(clip, { window: 2 })` keeps only ~2 s each side decoded
+(full preload of a 2 min 1080p clip is ~25 GB of bitmaps); then `seek` must
+`await K.clipSeek(clip, t)` before drawing. Footage-led pieces: `references/footage.md`.
+
 Frame = `clamp(floor(t * fps), 0, frame_count - 1)`. Hold or loop by mapping `t` yourself.
 Clips are frame sequences because `<video>.currentTime` seeking isn't frame-exact. It lands on
 nearby keyframes, differs between runs, and fails the determinism gate. A sequence is just
 images, so every seek is exact and repeatable. Use `--clip-fps` equal to the piece's fps for
 1:1 frames. A lower rate saves disk space but shows the clip at a lower frame rate.
 
-**Audio.** Audio isn't loaded by the page. Use `assets/audio/<id>.wav` with the audio pipeline
+**Audio.** Audio isn't loaded by the page. A clip's own sound (`<clip>-audio`) feeds
+`transcribe.py` and `cut.py voice` (footage.md). Use `assets/audio/<id>.wav` with the audio pipeline
 (`beats.py --track`, `mix.py --music/--vo`; see `audio.md`) and mux it at render time.
 
 **Docs.** Read brand guides and copy docs for colours, type and wording. Quote copy exactly. Never
 paraphrase claims.
+
+## Brand from local files
+
+`scripts/brand.py PROJECT [--logo ID] [--guide ID] [--role NAME=#hex] [--font display=FAMILY] [--confirm]`
+reads the ingested assets only (no network) and writes `brand.json` (+ `brand.js`,
+`docs/brand_swatch.png`, `docs/brand-guide.txt`):
+- `colors[]`: `{hex, share, sources, neutral, guide?}` ranked by painted area across logo (×3) and
+  screenshots; colours named in the guide (hex, `rgb()`, `RGB r g b`) come first with their exact hex.
+- `fonts{display, ui}`: from ingested font files (heaviest or "Display"-named family = display), else
+  names from the guide marked `supplied: false` (ingest the file, or the system stack is used).
+- `wordmark`: the logo asset (id, colours, the background it reads best on). `copy`: labelled lines
+  (tagline, headline, CTA…) from the guide; quote them exactly. `roles`: suggested bg / ink / accent
+  plus the user's `--role` choices; `confirmed` once the user approves.
+- PDF guides need `pypdf` or `pdftotext`; without either brand.py says so and uses the images only.
+
+**Brand confirmation (before building):** show `docs/brand_swatch.png` (palette chips and two font
+samples), ask "use these?", apply overrides with `--role`/`--font … --confirm`, and copy the result
+into the brief's `<art direction>`.
 
 ## Rules
 

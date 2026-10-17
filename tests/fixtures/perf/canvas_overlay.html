@@ -1,0 +1,18 @@
+<!doctype html><html><head><meta charset="utf-8"><title>perf fixture: canvas + DOM overlay</title>
+<!-- E8.1 fixture: canvas2d.html plus a DOM title on top of the canvas, so the canvas pixels are not
+     the whole picture and the fast path must not apply. -->
+<style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block}</style></head>
+<body><canvas id="c"></canvas><div style="position:absolute;left:20px;top:20px;color:#fff;font:bold 30px sans-serif">DOM title</div><script>
+const q = new URLSearchParams(location.search), W = +q.get('w') || 320, H = +q.get('h') || 320;
+window.MOTION = { width: W, height: H, fps: 30, duration: 1, loop: false };
+const c = document.getElementById('c'); c.width = W; c.height = H;
+const x = c.getContext('2d');
+window.ready = Promise.resolve();
+window.seek = t => {
+  const g = x.createLinearGradient(0, 0, W, H);
+  g.addColorStop(0, `hsl(${t * 300}, 70%, 55%)`); g.addColorStop(1, '#101418');
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+  x.fillStyle = '#f2efe9'; x.beginPath(); x.arc(W * (0.2 + 0.6 * t), H / 2, H / 6, 0, 2 * Math.PI); x.fill();
+  x.fillStyle = '#111'; x.font = `bold ${H / 10}px sans-serif`; x.fillText(t.toFixed(3), W / 10, H * 0.9);
+};
+</script></body></html>

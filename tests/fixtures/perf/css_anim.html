@@ -1,0 +1,13 @@
+<!doctype html><html><head><meta charset="utf-8"><title>perf fixture: CSS animation</title>
+<!-- E8.2 fixture: breaks the determinism rules on purpose with a running CSS animation, which
+     page.screenshot(animations="disabled") freezes. The CDP capture must hand such frames to
+     page.screenshot so the pixels stay exactly as in v0.2. -->
+<style>html,body{margin:0;background:#000}#s{position:absolute;width:320px;height:320px;background:#f2efe9;overflow:hidden}
+#b{position:absolute;top:120px;width:80px;height:80px;background:#ff4d1f}
+#spin{position:absolute;left:20px;top:20px;width:40px;height:40px;background:#123;animation:r 1s linear infinite}
+@keyframes r{to{transform:rotate(90deg)}}</style></head>
+<body><div id="s"><div id="b"></div><div id="spin"></div></div><script>
+window.MOTION = { width: 320, height: 320, fps: 30, duration: 1, loop: false };
+window.ready = Promise.resolve();
+window.seek = t => { document.getElementById('b').style.left = (20 + 200 * t) + 'px'; };
+</script></body></html>

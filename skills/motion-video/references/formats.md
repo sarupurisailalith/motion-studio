@@ -49,6 +49,14 @@ const S = K.safe.ui;                      // { x, y, w, h }: place captions and 
 - `data-text` on any text element. A visible run (opacity ≥ 0.9, on stage) shorter than 8 frames
   warns. Put it on the element that actually shows the words (the glyph row), not on a mask or
   wrapper that stays opaque while the text is clipped out of it.
+- `contrast` (same `data-text` elements, every 0.25 s while visible): the words are hidden, the
+  frame is rendered, and the text colour (with its opacity) is compared with the pixels behind
+  each line of words. Below 4.5:1 over 90 % of that area warns, with the element and time. A
+  pill or panel that is part of the element (or under it) counts as background, so text on a
+  moving background passes when it carries its own backing. The colour is read from the
+  `data-text` element itself, so put the attribute where the text colour is set. Text drawn into
+  a canvas, and gradient or transparent fills (`background-clip: text`), can't be measured and
+  are listed as such.
 - **Both gates read effective opacity and boxes, not masks or clipping.** `safe_area` checks every
   `[data-safe]` element whose opacity is > 0, wherever it is. So text that slides in from off-stage
   (or rises from below a mask) must stay at **opacity 0 until it is in place**, and go back to 0
@@ -66,6 +74,12 @@ const S = K.safe.ui;                      // { x, y, w, h }: place captions and 
 - Size type from the frame's short side: 9x16, 1x1 and 4x5 are all 1080 px wide, so portrait type ≈ the 1x1 size (up to ~10 % larger for a single hero word); 16x9 can go larger. Always measure the widest word against `K.safe.ui.w`.
 - If a shot is designed landscape-first, keep the key subject inside the centre 9:16 band so a
   crop still works.
+- **Non-text content in the platform-UI bands** (9x16: top 12 %, bottom 22 %, right 14 %; 4x5:
+  the strips outside `ui`): backgrounds, texture, illustration and the edges of a hero image may
+  extend into them, and full-bleed backgrounds should. The platform will cover part of them, so
+  nothing there may carry meaning: no text, numbers, logo, CTA, the product's key detail or a
+  face's eyes. The hero's focal point stays inside `K.safe.ui`; a hero may be cropped by a band,
+  never depend on what the band hides.
 - Check every format on the contact sheet. "Looks composed" applies to each one separately.
 
 ### Preview keys (`composition.html`)

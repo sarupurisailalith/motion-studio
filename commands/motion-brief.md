@@ -13,6 +13,12 @@ Write a complete motion-video brief for: $ARGUMENTS
    <paths…>` (add `--attached` for chat uploads). Read `assets/assets.json`. Name any
    missing or unreadable file. Never invent assets; ask the user to confirm they own them
    or may use them.
+   **Brand check:** with a logo, screenshots, fonts or a brand guide, run
+   `python3 ${CLAUDE_PLUGIN_ROOT}/skills/motion-video/scripts/brand.py ./motion/<slug>` and show
+   `docs/brand_swatch.png` (palette chips + two font samples). Ask the user to confirm or
+   override (`brand.py … --role accent=#hex --font display="…" --confirm`). Record the result in
+   `<art direction>` ("Brand confirmed (brand.json): bg …, ink …, accent …; display …, ui …").
+   If the user isn't there, use the suggestion and mark it `[[TODO: confirm brand]]`.
 4. Pick the closest genre playbook and choose a visual rule, beat structure and transition
    approach that fit the user's subject.
 5. Fill every template field — exact duration and fps, a one-line concept, hex palette with

@@ -60,7 +60,7 @@ class Compat(unittest.TestCase):
         r = render(html, "--workers", "1", "--duration", "0.3")
         self.assertEqual(r.returncode, 0, r.stderr)
         out = html.parent / "renders"
-        self.assertEqual(sorted(p.name for p in out.iterdir()),
+        self.assertEqual(sorted(p.name for p in out.iterdir() if p.name != ".cache"),  # E8.4 render cache
                          ["blank_frame.mp4", "blank_frame_report.json"])
         rep = json.loads((out / "blank_frame_report.json").read_text())
         self.assertNotIn("format", rep)
@@ -99,7 +99,7 @@ class Format(unittest.TestCase):
         self.assertTrue(sheet.exists(), r.stdout)
         w, h = png_size(sheet)
         self.assertGreater(h, w)
-        self.assertTrue((html.parent / "renders" / "fmt_9x16_t000.000.png").exists())
+        self.assertTrue((html.parent / "renders" / "stills" / "fmt_9x16_t000.000.png").exists())  # D.2
 
     def test_full_render_two_formats(self):
         html = fixture("fmt.html")
@@ -338,7 +338,8 @@ class Deliver(unittest.TestCase):
             self.assertEqual(item["video"], f"renders/fmt_{f}.mp4")
             self.assertEqual(item["poster"], f"renders/fmt_{f}_poster.png")
             self.assertEqual(item["sheet"], f"renders/fmt_{f}_sheet.png")
-            for k in ("video", "poster", "sheet"):
+            self.assertEqual(item["sheet_phone"], f"renders/fmt_{f}_sheet_phone.png")
+            for k in ("video", "poster", "sheet", "sheet_phone"):
                 self.assertTrue((root / item[k]).exists(), item[k])
             self.assertEqual((item["width"], item["height"]), sizes[f])
             self.assertEqual(png_size(root / item["poster"]), sizes[f])

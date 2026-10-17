@@ -1,0 +1,34 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>E10.15 spike — Zdog inside p5's 2D canvas</title>
+<style>html,body{margin:0;background:#000;overflow:hidden}#stage{position:absolute;left:0;top:0}</style></head>
+<body><div id="stage"></div>
+<!-- One shared 2D canvas, interleaved draw order: p5 sky (back) → Zdog Pip → p5 mist (front).
+     K.Z.render(scene, p.drawingContext, { clear: false }) draws between p5 calls and restores
+     p5's transform. -->
+<script src="vendor/p5.min.js"></script>
+<script src="vendor/zdog.dist.min.js"></script>
+<script src="kit.js"></script>
+<script src="kit-p5.js"></script>
+<script src="kit-zdog.js"></script>
+<script src="models/pip.js"></script>
+<script>
+const K = window.K, TAU = Math.PI * 2;
+window.MOTION = K.init({ width: 720, height: 720, fps: 30, duration: 4, loop: true });
+const { W, H } = K.FORMAT, D = window.MOTION.duration;
+const scene = new Zdog.Anchor(), cam = K.Z.camera(scene);
+const pip = K.Z.make('pip', cam.world), rig = K.Z.rig(pip.joints);
+const sk = K.sketch({
+  parent: document.getElementById('stage'), seed: 2,
+  draw: (p, t) => {
+    p.background('#CFE6E9'); p.noStroke(); p.fill('#FFF6DA'); p.circle(W * 0.7, H * 0.25, 140);   // back (p5)
+    cam.set({ yaw: TAU * t / D, pitch: 0.2 });
+    rig.pose(t, [{ clip: 'idle', period: D / 2 }, { clip: 'hop', at: 1, h: 30 }]);
+    K.Z.render(scene, p.drawingContext, { zoom: 4, cx: W / 2, cy: H * 0.72, clear: false });     // middle (Zdog)
+    const n = K.loopNoise(t, D, 0.6);                                                             // front (p5)
+    p.fill(255, 255, 255, 120);
+    for (let i = 0; i < 6; i++) p.circle(K.rand(1, i) * W + 60 * (p.noise(n.x + i, n.y) - 0.5), H * 0.8 + 40 * K.rand(2, i), 160);
+  },
+});
+window.ready = sk.ready;
+window.seek = t => sk.seek(t);
+</script></body></html>

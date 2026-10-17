@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Footage Composition</title>
+<!--
+  MOTION STUDIO — footage-led composition (E12.8): the speaker, cut by edl.json, recomposed with
+  speech-timed graphics from story.json. Copy this file, kit.js AND kit-footage.js into the project.
+
+  Data (all written before the build, all loaded before window.ready — see references/footage.md):
+    assets/assets.js  ingest.py        the clip (frame sequence) and its clip audio
+    transcript.js     transcribe.py    words with ids and times
+    edl.js            cut.py suggest   the edit (events: clip, in, out, at)
+    story.js          story.py         segments: role, layout, graphics cues keyed to word ids
+
+  LAYER STACK: background (#bg) -> speaker (canvas) -> graphics (#graphics) -> captions (#captions)
+
+  THE CONTRACT is the usual one (render.py relies on it): window.MOTION, window.ready,
+  window.seek(t). seek awaits K.edlSeek(t) first, so windowed clips are decoded before drawing.
+  Same determinism rules as composition.html. Preview: Space, ←/→, F formats, G safe areas, ?t=3.2.
+-->
+<style>
+  :root{
+    --bg:#f3f1ec; --ink:#121212; --accent:#ff4d1f; --panel:#e4e0d6;
+    --font-display: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  html,body{margin:0;height:100%;background:#000;overflow:hidden}
+  #stage{position:absolute;left:0;top:0;transform-origin:0 0;overflow:hidden;background:var(--bg)}
+  #stage *{box-sizing:border-box}
+  .layer{position:absolute;left:0;top:0}
+  #bg{background:var(--bg)}
+  #panel{position:absolute;background:var(--panel)}
+  #preview-ui{position:fixed;left:0;right:0;bottom:0;height:28px;display:flex;gap:8px;align-items:center;
+      padding:0 10px;background:rgba(0,0,0,.6);color:#fff;font:12px ui-monospace,monospace;z-index:9}
+  #preview-ui input{flex:1}
+  #safe-overlay{position:absolute;left:0;top:0;pointer-events:none;display:none;z-index:8}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bg" class="layer"><div id="panel"></div></div>
+  <canvas id="speaker" class="layer"></canvas>
+  <div id="graphics" class="layer"></div>
+  <div id="captions" class="layer"></div>
+</div>
+
+<script src="assets/assets.js"></script>
+<script src="transcript.js"></script>
+<script src="edl.js"></script>
+<script src="story.js"></script>
+<script src="kit.js"></script>
+<script src="kit-footage.js"></script>
+<script>
+const K = window.K;
+const STORY = window.STORY || { segments: [] };
+const FD = K.footage();                       // TRANSCRIPT + EDL + ASSETS -> word/edit lookups
+
+window.MOTION = {
+  width: 1920, height: 1080, fps: 30, duration: +FD.duration.toFixed(3), loop: false,
+  // sound sync points; cues with an `sfx` in story.json add theirs below
+  hits: [],
+};
+window.FOOTAGE = true;                        // render.py: run the cue_timing and claim_trace gates
+K.init(window.MOTION);
+const { width: W, height: H } = window.MOTION;
+
+/* =========================================================================
+   SCENE — driven by story.json. Change looks here; change timing in story.json / edl.json.
+   ========================================================================= */
+const $ = id => document.getElementById(id);
+const stage = $('stage'), canvas = $('speaker'), ctx = canvas.getContext('2d');
+for (const el of [$('bg'), canvas, $('graphics'), $('captions')]) { el.style.width = W + 'px'; el.style.height = H + 'px'; }
+canvas.width = W; canvas.height = H;
+const clipId = STORY.clip || (window.TRANSCRIPT && window.TRANSCRIPT.clip) || (window.EDL && window.EDL.clip);
+const clip = K.footageAsset(clipId);
+const FOCUS = STORY.focus || [0.5, 0.4];     // where the face is in the clip (fractions), for crops
+const ROLE_LAYOUT = { hook: 'full', problem: 'split', product: 'pig', feature: 'split', proof: 'corner',
+                      objection: 'full', cta: 'shape' };
+
+// segments -> [{t0, layout, rect, area}] on the timeline (a segment starts at its first word)
+const segs = (STORY.segments || []).map(s => {
+  const layout = s.layout || ROLE_LAYOUT[s.role] || 'full';
+  const rect = K.speakerRect(layout);
+  return { s, t0: s.from ? K.cue(s.from) : 0, layout, rect, area: K.graphicsArea(rect, { captions: STORY.captions !== false }) };
+}).sort((a, b) => a.t0 - b.t0);
+if (!segs.length || segs[0].t0 > 0) {
+  const rect = K.speakerRect('full');
+  segs.unshift({ s: {}, t0: 0, layout: 'full', rect, area: K.graphicsArea(rect, { captions: STORY.captions !== false }) });
+}
+segs[0].t0 = 0;
+const LAYOUT_T = 0.5;                          // layout change: 0.5 s on the morph curve
+const morph = K.bezier(.45, 0, .15, 1);
+function speakerAt(t) {
+  let k = 0;
+  while (k + 1 < segs.length && t >= segs[k + 1].t0) k++;
+  const cur = segs[k], prev = segs[k - 1];
+  if (!prev || t >= cur.t0 + LAYOUT_T) return cur.rect;
+  return K.mixRect(prev.rect, cur.rect, morph(K.seg(t, cur.t0, cur.t0 + LAYOUT_T)));
+}
+
+// graphics cues -> kit components (each keyed to its word id: data-cue, data-claim)
+const G = $('graphics');
+const MAKE = {
+  'keyword':      (c, area) => K.keywordPop(G, { area, ...c }),
+  'stat':         (c, area) => K.statCard(G, { area, ...c }),
+  'lower-third':  (c, area) => K.lowerThird(G, { ...c }),
+  'feature-list': (c, area) => K.featureList(G, { area, ...c }),
+  'quote':        (c, area) => K.pullQuote(G, { area, ...c }),
+  'cta':          (c, area) => K.ctaCard(G, { area, ...c }),
+  'screenshot':   (c, area) => { const a = K.footageAsset(c.asset); return K.deviceShot(G, { area, src: a.path, w: a.w, h: a.h, ...c }); },
+};
+for (const seg of segs) for (const c of seg.s.cues || []) {
+  if (!MAKE[c.kind]) throw new Error(`story.json: unknown cue kind "${c.kind}" (${Object.keys(MAKE).join(', ')})`);
+  MAKE[c.kind](c, seg.area);
+  if (c.sfx) window.MOTION.hits.push([K.cue(c.at), `${c.kind}-${c.at}`, c.sfx]);
+}
+if (STORY.captions !== false) K.captions($('captions'));
+
+// background panel follows the free area, so graphics always sit on a calm surface
+function drawBackground(t, R) {
+  const full = R.w >= W * 0.9 && R.h >= H * 0.9, p = $('panel');
+  p.style.cssText = full ? 'display:none' :
+    `left:${Math.round(R.x - 18)}px;top:${Math.round(R.y - 18)}px;width:${Math.round(R.w + 36)}px;height:${Math.round(R.h + 36)}px;` +
+    `border-radius:${Math.round(R.r + 18)}px`;
+}
+
+function render(t) {
+  const R = speakerAt(t);
+  drawBackground(t, R);
+  ctx.clearRect(0, 0, W, H);
+  const s = K.edl(t);
+  if (s) K.drawSpeaker(ctx, K.footageAsset(s.clip), s.clipT, R, { focus: FOCUS, zoom: K.punch(t, 1.12) });
+  K.footageUpdate(t);
+}
+
+/* =========================================================================
+   RUNTIME (shared — normally no edits needed below)
+   ========================================================================= */
+stage.style.width = W + 'px'; stage.style.height = H + 'px';
+const params = new URLSearchParams(location.search);
+const RENDER_MODE = params.has('render');
+
+window.ready = (async () => {
+  if (document.fonts && document.fonts.ready) await document.fonts.ready;
+  await K.loadClip(clip, { window: 2 });      // windowed: long clips never decode all at once
+  await Promise.all([...document.images].map(img => img.decode ? img.decode().catch(() => {}) : null));
+})();
+window.seek = async (t) => { await window.ready; await K.edlSeek(t); render(t); };
+
+function fit() {
+  if (RENDER_MODE) { stage.style.transform = 'none'; return; }
+  const s = Math.min(innerWidth / W, (innerHeight - 28) / H);
+  stage.style.transform = `translate(${(innerWidth - W * s) / 2}px,${(innerHeight - 28 - H * s) / 2}px) scale(${s})`;
+}
+addEventListener('resize', fit); fit();
+
+if (!RENDER_MODE) {
+  const ui = document.createElement('div'); ui.id = 'preview-ui';
+  ui.innerHTML = `<button id="pp">❚❚</button><input id="sc" type="range" min="0" step="0.001"><span id="tc"></span><span id="fmt">${K.FORMAT.name} ${W}×${H} · F format · G safe</span>`;
+  document.body.appendChild(ui);
+  const D = window.MOTION.duration, fps = window.MOTION.fps, sc = ui.querySelector('#sc'), tc = ui.querySelector('#tc');
+  sc.max = D;
+  let playing = !params.has('t'), t0 = performance.now(), base = parseFloat(params.get('t') || 0), busy = false;
+  const show = async t => { if (busy) return; busy = true; await window.seek(t); busy = false; sc.value = t; tc.textContent = t.toFixed(3) + 's / f' + Math.round(t * fps); };
+  const tick = () => {
+    if (playing) { const t = Math.min(base + (performance.now() - t0) / 1000, D); show(t); }
+    requestAnimationFrame(tick);
+  };
+  const setPlay = p => { playing = p; base = +sc.value; t0 = performance.now(); ui.querySelector('#pp').textContent = p ? '❚❚' : '▶'; };
+  ui.querySelector('#pp').onclick = () => setPlay(!playing);
+  sc.oninput = () => { setPlay(false); show(+sc.value); };
+  addEventListener('keydown', e => {
+    if (e.code === 'Space') setPlay(!playing);
+    if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') { setPlay(false); show(K.clamp(+sc.value + (e.code === 'ArrowRight' ? 1 : -1) / fps, 0, D)); }
+  });
+  const NS = 'http://www.w3.org/2000/svg', ov = document.createElementNS(NS, 'svg');
+  ov.id = 'safe-overlay'; ov.setAttribute('width', W); ov.setAttribute('height', H); ov.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  [['title', '#00a3ff', '14 10'], ['ui', '#ff2bd6', '']].forEach(([name, color, dash]) => {
+    const r = K.safe[name], el = document.createElementNS(NS, 'rect');
+    Object.entries({ x: r.x, y: r.y, width: r.w, height: r.h, fill: 'none', stroke: color, 'stroke-width': 3, 'stroke-dasharray': dash })
+      .forEach(([k, v]) => el.setAttribute(k, v));
+    ov.append(el);
+  });
+  stage.appendChild(ov);
+  addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === 'g' || e.key === 'G') ov.style.display = ov.style.display === 'block' ? 'none' : 'block';
+    if (e.key === 'f' || e.key === 'F') location.search = K.formatSearch(K.nextFormat());
+  });
+  window.ready.then(() => { show(base); tick(); });
+}
+</script>
+</body>
+</html>

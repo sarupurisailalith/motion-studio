@@ -21,17 +21,28 @@ Method:
 3. Read every image. Judge readability on the phone sheet, not the full sheet. For more frames:
    `ffmpeg -v error -ss <t> -i video.mp4 -frames:v 1 /tmp/f_<t>.png` (every 0.1 s across a
    transition) and Read them. Check every format, not only the first.
-4. Any `FAIL` in check.py, `--check-only` or sync.py counts as a FAIL gate.
+4. Any `FAIL` in check.py, `--check-only` or sync.py counts as a FAIL gate. A WARN is a
+   measurement, not a verdict: `frozen` means no 40 px region visibly moved for that stretch,
+   `contrast` names an element and time, `pacing` compares hard cuts only (morphs don't count).
+   Confirm each on the frames before it costs a score, and never cite a WARN as the evidence.
 5. Score each dimension 1–10 with one line of evidence (timestamp or sheet tile, e.g. `phone r2c3`):
    - **hook**: first 2 s; frame 0 is a finished picture, something moves by 0.5 s.
    - **readability**: legible at phone size, ≥ 8 clean frames, inside safe area, not clipped.
    - **motion**: arrive fast, land soft; no linear or mushy moves, pops, or dead holds > 1 s.
    - **variety**: something new every 2–4 s.
    - **brand**: supplied assets used as-is (a redrawn, recoloured or drawn stand-in for one
-     scores ≤ 5); brief's hexes and fonts; no banned effects; no unsupplied claim, number or logo.
+     scores ≤ 5); brief's hexes and fonts; no banned effects; no unsupplied claim, number or logo
+     (domain-standard defaults the brief flags as `[[DEFAULT …]]`, like a recipe ratio, are fine).
+     Motion and timing faults (overlaps, crossfades, holds) go under motion, not brand.
    - **sync**: cuts and hits land on beats/SFX, sync.py offsets ≤ 20 ms. `n/a` if silent.
    - **concept**: the one-line idea is legible; the hero is the most memorable thing.
 6. Pick the top 3 fixes, worst first: name the element, the number to change, the easing/timing.
+   Each fix must be possible in the frame you were given. Text, logos, CTAs and the hero's focal
+   point stay inside the format's `K.safe.ui` rect: in 9x16 that is x 6 %, y 12 %, w 80 %, h 66 %
+   (about 864 × 1267 px of 1080 × 1920), shared with everything else on screen at that moment.
+   Before asking for a size ("cup at 45 % of the width"), check it fits there next to the other
+   elements. Backgrounds and illustration may bleed into the platform bands, but nothing that
+   carries meaning (formats.md).
 
 Verdict rule: `ship` only if every applicable score is ≥ 8 **and** there are 0 FAIL gates;
 otherwise `one more pass`. Output exactly this markdown (no fence, nothing before or after; the

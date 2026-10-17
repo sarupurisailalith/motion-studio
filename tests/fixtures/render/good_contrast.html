@@ -1,0 +1,16 @@
+<!doctype html><html><head><meta charset="utf-8"><title>render fixture: contrast pass</title>
+<!-- E5.6 contrast fixture. White words on a dark pill that travels with them over a busy, moving
+     striped background, plus a 50 %-opacity fade-in (ignored until opacity >= 0.9). Passes. -->
+<style>html,body{margin:0;background:#000}#s{position:absolute;left:0;top:0;width:320px;height:320px;overflow:hidden;
+background:repeating-linear-gradient(90deg,#f2efe9 0 20px,#ff4d1f 20px 40px)}
+#pill{position:absolute;top:140px;padding:6px 14px;border-radius:999px;background:#111;color:#fff;font:bold 24px sans-serif}</style></head>
+<body><div id="s"><div id="pill" data-text>on a pill</div></div><script>
+window.MOTION = { width: 320, height: 320, fps: 30, duration: 2, loop: false };
+window.ready = Promise.resolve();
+const s = document.getElementById('s'), p = document.getElementById('pill');
+window.seek = t => {
+  s.style.backgroundPosition = (t * 60) + 'px 0';
+  p.style.left = (20 + t * 40) + 'px';
+  p.style.opacity = Math.min(1, t / 0.3);
+};
+</script></body></html>
