@@ -78,7 +78,8 @@ def rms_db(x):
 @helpers.needs_ffmpeg
 class SFX(unittest.TestCase):
     NAMES = ["whoosh", "swoosh", "tick", "click", "pop", "thud", "blip", "riser", "swell",
-             "impact", "shimmer", "type-key"]
+             "impact", "shimmer", "type-key", "scrape", "whoomp", "crackle", "creak", "splash",
+             "rustle", "chime", "zip", "sizzle"]
 
     def render(self, hits, duration, *extra, d=None):
         d = d or helpers.tmpdir()

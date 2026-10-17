@@ -98,9 +98,9 @@ python3 $S/check.py P/renders/<slug>_<fmt>.mp4 [--loop] [--max-hold 1.0] [--sync
 Follow `references/audio.md` (or `/motion-audio`). Music is user-supplied only; never fetch
 songs. No track → silent or SFX only, and say so. In short: `beats.py --track song --duration D
 --out P` **before** the picture is final when anything is beat-timed → `render.py --hits` →
-`sfx.py P/renders/<slug>_hits.json --out P/audio/sfx.wav` → `mix.py --duration D --out
-P/audio/mix.wav [--music P/music.wav] [--sfx P/audio/sfx.wav] --mux <every mp4>` (−14 LUFS,
-refreshes deliver.json) → `check.py --sync P/audio/sfx_events.json`. Quick path for "just put
+`sfx.py P/renders/<slug>_hits.json --out P/audio/sfx.wav` (project sounds in `P/audio/palette.py`;
+user-supplied takes with `--samples DIR`) → `mix.py [--duration D] --out P/audio/mix.wav
+[--music P/music.wav] [--sfx P/audio/sfx.wav] --mux <every mp4>` (−14 LUFS, refreshes deliver.json) → `check.py --sync P/audio/sfx_events.json`. Quick path for "just put
 this track under it": `render.py … --audio track.wav`.
 
 ### 7. Critic rounds (only on request)
