@@ -26,6 +26,8 @@ rounds if wanted, approval gate). Adapt the closest playbook in `references/genr
   `python3 $S/ingest.py P <paths…> [--attached]` copies and normalises them into `P/assets/`
   with `assets.json`. Refer to them by id; use them as-is, never redraw or stand in for one.
   Read `references/assets.md` (fonts, images, SVG, clips via `K.loadClip`).
+- **Footage-led** (a talking clip recut with graphics; the brief has `<footage>`): follow
+  `references/footage.md` (transcribe.py → cut.py → story.json → `templates/footage-composition.html`).
 
 ### 2. Storyboard, then sign-off
 Table: `time | on screen | purpose | exit | carried object`. About one idea per 1–2 s; hook in

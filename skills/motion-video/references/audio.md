@@ -77,6 +77,13 @@ change `--seed` for a different take.
 - Low, tonal sounds (`thud`, `blip`) under a bass-heavy track can't be timed reliably; if `sync` says "not audible", the
   listener can't hear it either: raise it, move it, or drop it.
 
+### Voice
+- A voice-over recorded without picture: `transcribe.py P <audio-id> --script vo.txt --snap P/beats.json [--every 2]`
+  splits it into phrases at silences and moves each phrase (never stretched) onto a beat → `P/audio/vo.wav` + `vo.json`
+  (phrase and word times on the new timeline; `vo.js` for captions: `K.footage({ transcript: window.VO, edl: null })`). Mix it with `mix.py --vo P/audio/vo.wav`.
+- On-camera speech is never re-timed: cut it with an EDL and build the stem with `cut.py voice` (`references/footage.md`).
+- Captions from word timings: `K.captions` in `kit-footage.js` (≤ 7 words, current word highlighted).
+
 ### Mix numbers
 - Master: −14 LUFS integrated ±0.2, true peak ≤ −1 dBTP, AAC 48 kHz 192 kb/s in the MP4. `mix.py` does all of this.
 - Voice-over: music ducks −14 dB under the VO (`--duck-db`, −12 to −18), 50 ms attack, 300 ms release.

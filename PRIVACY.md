@@ -25,9 +25,10 @@ The plugin's own downloads happen only when you set things up:
 
 | When | What is downloaded | From |
 |---|---|---|
-| You install the requirements | `playwright`, `numpy`, `pillow` (and optionally `librosa`) | PyPI |
+| You install the requirements | `playwright`, `numpy`, `pillow` (and optionally `librosa`, `faster-whisper`) | PyPI |
 | You run `python3 -m playwright install chromium` | A Chromium build | Playwright's download host |
 | You (or the agent, for a Three.js/GSAP/Lottie piece) run `vendor.py` | Exact pinned versions of `three`, `gsap`, `lottie-web` | The npm registry |
+| You choose to install `faster-whisper` (optional, for word timings) and run `transcribe.py` | On its first use, faster-whisper downloads the speech model weights you name (default `small`); later runs use the cached copy. Your audio is transcribed locally and never uploaded | Hugging Face (huggingface.co) |
 
 Those requests go to the services listed above under their own privacy policies. Motion Studio
 sends them no data about you or your project.
@@ -45,4 +46,4 @@ Motion Studio is a developer tool and is not directed at children under 18.
 Questions about privacy: open an issue at
 <https://github.com/sarupurisailalith/motion-studio/issues> or email sarupurisailalith@gmail.com.
 
-_Last updated: 2026-10-15_
+_Last updated: 2026-10-17_

@@ -29,7 +29,11 @@ names. Pass `--quiet` to render.py. Keep script output out of replies; quote num
    from `<formats>`). If the user is present, stop and wait for approval. In unattended runs,
    continue and state the assumption.
 4. **Build.** Copy `templates/composition.html` (or `three-composition.html`) **and**
-   `templates/kit.js` into `P`. If a track was supplied, run
+   `templates/kit.js` into `P`. If the brief has `<footage>` (renderer: footage, a talking clip
+   recut with graphics), follow `references/footage.md` instead: transcribe.py → cut.py suggest
+   (show the cut list at the sign-off gate) → story.json + story.py → copy
+   `templates/footage-composition.html`, `kit.js` and `kit-footage.js`; voice via `cut.py voice`
+   and `mix.py --vo`, then `check.py --edl P/edl.json` in step 8. If a track was supplied, run
    `python3 $S/beats.py --track <song> --duration D --out P` before timing any scene, and
    include `beats.js` before the kit script. Lay out per format with `K.pick`, keep
    `[data-safe]` text inside `K.safe.ui`, put the brief's hits in `MOTION.hits`.
