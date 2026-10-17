@@ -1,0 +1,27 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>canvas caption + K.proxy</title>
+<style>html,body{margin:0;background:#000}#stage{position:absolute;left:0;top:0;background:#223}</style></head>
+<body><div id="stage"></div>
+<!-- E10.13 fixture: a caption drawn on a canvas layer, with a K.proxy box for the gates.
+     OUTSIDE = true draws it in the 9x16 platform-UI zone at the bottom (must fail safe_area). -->
+<script src="kit.js"></script>
+<script src="kit-layers.js"></script>
+<script>
+const OUTSIDE = false;
+const K = window.K;
+window.MOTION = K.init({ width: 1080, height: 1920, fps: 30, duration: 2, loop: true });
+const { W, H } = K.FORMAT, S = K.safe.ui;
+document.getElementById('stage').style.cssText += `;width:${W}px;height:${H}px`;
+const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+const ctx = cv.getContext('2d'), cap = K.proxy('canvas-caption', null);
+function draw(t) {
+  ctx.clearRect(0, 0, W, H);
+  const a = K.seg(t, 0.2, 0.5) * (1 - K.seg(t, 1.5, 1.8));
+  ctx.font = '800 72px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = `rgba(255,255,255,${a})`;
+  const x = W / 2, y = OUTSIDE ? H - 120 : S.y + S.h / 2;
+  ctx.fillText('Canvas caption', x, y);
+  cap.set(K.textBox(ctx, 'Canvas caption', x, y), a);
+}
+K.layers([{ name: 'canvas', el: cv, seek: draw }]);
+</script></body></html>
