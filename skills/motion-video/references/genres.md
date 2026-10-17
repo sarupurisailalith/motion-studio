@@ -90,6 +90,7 @@ Tested starting points in `templates/recipes/`; each passes every gate as shippe
 | generative / abstract loop | `recipes/p5-noise-terrain.html` | p5 | stacked ridges over loop-periodic noise; also a background plate |
 | generative / abstract loop | `recipes/p5-particle-choreography.html` | p5 | closed-form particles: seeded orbits blended into a target shape (no sim state) |
 | glyph kinetic type | `recipes/p5-glyph-points.html` | p5 | `textToPoints` from a local font, assemble → breathe → scatter; `K.proxy` for the gates |
+| generative 3D / shader loop | `recipes/p5-webgl-strands.html` | p5 WEBGL (`--gl`) | lights, perspective orbit, a p5.strands shader with a t-driven uniform |
 | beat visuals | `recipes/p5-beat-pulse.html` | p5 | pulses from `beats.js` beats (fallback grid), downbeat hits in `MOTION.hits`; never live audio |
 | illustrated 3D / mascot explainer | `recipes/zdog-mascot-explainer.html` | zdog | catalog Pip + chart-bars, rig clips, DOM labels pinned with `K.Z.project` |
 | character scene, diorama | `templates/zdog-composition.html`, `templates/layered-composition.html` | zdog, layered | rig clips; p5 sky behind a Zdog forest |

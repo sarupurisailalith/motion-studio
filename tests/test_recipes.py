@@ -46,7 +46,8 @@ class Recipes(unittest.TestCase):
         for p in sorted(RECIPES.glob("*.html")):
             with self.subTest(recipe=p.name):
                 html = recipe_project(p.name)
-                g = parse_report(run_script("render.py", html, "--check-only").stdout)["gates"]
+                gl = ["--gl"] if "webgl" in p.name else []
+                g = parse_report(run_script("render.py", html, "--check-only", *gl).stdout)["gates"]
                 self.assertEqual(g["determinism"], "pass", g)
                 self.assertTrue(g["loop_seam"].startswith("pass"), g)
                 self.assertTrue(g["safe_area"].startswith("pass"), g)

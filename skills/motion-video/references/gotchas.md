@@ -58,4 +58,7 @@ as an unmodified separate file. Never paste p5 into the composition or the plugi
   `createCapture`, DOM helpers (`createDiv`…; use plain DOM with `data-safe data-text`),
   `saveGif` / `saveFrames`, and live input (`mouseX`, `keyIsPressed`).
 - **Size:** `pixelDensity(devicePixelRatio)` (K.sketch sets it), so `--scale 2` supersamples.
-  `WEBGL` sketches render with `--gl`; check determinism there before you rely on them.
+  `WEBGL` sketches render with `--gl`. Validated under the gates: lights, a perspective camera
+  and p5.strands shaders (`recipes/p5-webgl-strands.html`; in instance mode
+  `modify(({ p5 }) => …, { p5: p })`, uniforms read t-derived values) at ~4 frames/s with 4
+  workers. Not yet validated: `textToModel`, WebGPU (`p5-webgpu`); run `--check-only` first.
