@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>footage gate fixture</title>
+<style>html,body{margin:0;background:#000;overflow:hidden}#stage{position:absolute;inset:0;width:640px;height:360px;background:#eee}</style>
+</head>
+<body>
+<div id="stage"></div>
+<!-- written by the test: transcript.js (window.TRANSCRIPT), edl.js (window.EDL), case.js (window.CASE) -->
+<script src="transcript.js"></script>
+<script src="edl.js"></script>
+<script src="case.js"></script>
+<script src="kit.js"></script>
+<script src="kit-footage.js"></script>
+<script>
+// CASE = { late: s, cues: [{kind, ...opts}] }; late shifts every graphic's start (the failing fixture)
+const C = window.CASE;
+K.footage();
+window.MOTION = K.init({ width: 640, height: 360, fps: 30, duration: C.duration, loop: false });
+window.FOOTAGE = true;
+const stage = document.getElementById('stage');
+const make = { keyword: K.keywordPop, stat: K.statCard, quote: K.pullQuote, 'lower-third': K.lowerThird };
+const parts = C.cues.map(c => make[c.kind](stage, Object.assign({ size: 40 }, c)));
+if (C.captions) K.captions(stage, { size: 22 });
+window.ready = Promise.resolve();
+window.seek = async t => { K.footageUpdate(t - (C.late || 0)); };
+</script>
+</body>
+</html>

@@ -15,7 +15,8 @@ Usage:
   python3 render.py comp.html --audio track.wav       # mux audio (+ loudnorm to -14 LUFS)
   python3 render.py comp.html --check-only            # gates only, no video: determinism, loop seam,
                                                       # safe_area ([data-safe] inside K.safe.ui),
-                                                      # text_duration ([data-text] visible >= 8 frames)
+                                                      # text_duration ([data-text] visible >= 8 frames);
+                                                      # footage pieces add cue_timing + claim_trace
   python3 render.py comp.html --workers 4             # parallel render (default: half the CPUs, max 4)
 
   python3 render.py comp.html --format 16x9,9x16      # one render per format -> comp_16x9.mp4, comp_9x16.mp4
@@ -525,6 +526,13 @@ async def run_gates(page, a, M, D, fps, report):
     vlog("gate safe_area:", report["gates"]["safe_area"])
     report["gates"]["text_duration"] = await gate_text_duration(page, D, fps, bool(M.get("loop")))
     vlog("gate text_duration:", report["gates"]["text_duration"])
+    # footage pieces only (window.FOOTAGE / data-cue / data-claim): cue_timing, claim_trace (E12.11)
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import _footage_gates
+    await _footage_gates.run(page, a.html.parent, D, fps, report)
+    for k in ("cue_timing", "claim_trace"):
+        if k in report["gates"]:
+            vlog(f"gate {k}:", report["gates"][k])
 
 
 async def full_render(pw, a, html, fmt, M, D, fps, scale, out, errors):
