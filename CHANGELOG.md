@@ -3,6 +3,14 @@
 All notable changes to Motion Studio. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/). Backlog ids (E…) refer to the project backlog.
 
+## [0.3.1] — 2026-10-18
+
+### Fixed
+- Titles and captions in `composition.html`, `p5-composition.html` and the `p5-glyph-points`
+  recipe now shrink to fit the UI-safe width (after the camera push) when the system font is
+  wider than macOS's, so 9x16 renders on Linux and Windows no longer fail the `safe_area` gate.
+- CI uses `actions/checkout@v5` and `actions/setup-python@v6` (Node 24).
+
 ## [0.3.0] — 2026-10-18
 
 Footage-led videos, two new engines (Zdog, p5.js), a brand kit, faster renders and more QA gates.

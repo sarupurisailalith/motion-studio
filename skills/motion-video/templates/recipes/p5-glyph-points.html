@@ -26,7 +26,8 @@ window.MOTION = K.init({ width: 1080, height: 1080, fps: 30, duration: 6, loop: 
 const { W, H } = K.FORMAT, D = window.MOTION.duration, S = K.safe.ui;
 const stage = document.getElementById('stage');
 stage.style.cssText += `;width:${W}px;height:${H}px`;
-const WORD = 'motion', SIZE = Math.round(Math.min(S.w / (WORD.length * 0.62), 260));
+const WORD = 'motion';
+let SIZE = Math.round(Math.min(S.w / (WORD.length * 0.62), 260));
 const io = K.bezier(.45, 0, .15, 1);
 let pts = [], box = null;
 const proxy = K.proxy('glyph-word', null);
@@ -36,7 +37,11 @@ const sk = K.sketch({
   setup: async p => {
     const font = await p.loadFont('assets/display.ttf');
     p.textFont(font); p.textSize(SIZE);                  // textToPoints reads this size
-    const b = font.textBounds(WORD, 0, 0);
+    let b = font.textBounds(WORD, 0, 0);
+    if (b.w > S.w) {                                     // a wider font than estimated: fit S.w
+      SIZE = Math.floor(SIZE * S.w / b.w) - 1;
+      p.textSize(SIZE); b = font.textBounds(WORD, 0, 0);
+    }
     const x = Math.round(S.x + S.w / 2 - b.w / 2 - b.x), y = Math.round(S.y + S.h / 2 - b.h / 2 - b.y);
     pts = font.textToPoints(WORD, x, y, { sampleFactor: 0.22 });
     box = { x: x + b.x, y: y + b.y, w: b.w, h: b.h };

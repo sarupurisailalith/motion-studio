@@ -115,6 +115,8 @@ const RENDER_MODE = params.has('render');
 window.ready = (async () => {
   cap.style.fontSize = L.cap + 'px';
   if (document.fonts && document.fonts.ready) await document.fonts.ready;
+  // a wider fallback font (Linux, Windows): fit the caption to the UI-safe width
+  if (cap.offsetWidth > S.w) cap.style.fontSize = Math.floor(L.cap * S.w / cap.offsetWidth) - 1 + 'px';
   await sk.ready;
 })();
 window.seek = async t => { await window.ready; await render(t); };

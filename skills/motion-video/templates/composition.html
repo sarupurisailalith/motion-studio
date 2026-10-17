@@ -99,6 +99,7 @@ const L = K.pick({
   '4x5':   { font: 190, scale: 1.12, gap: 64 },
 });
 const fontPx = L.font, k = L.scale;
+const PUSH = 0.035;                               // camera push at mid-loop (scale 1 + PUSH)
 const S = K.safe.ui;
 const cx = S.x + S.w / 2, cy = S.y + S.h / 2;     // the group's centre: the UI-safe centre
 // The group spans the title (fontPx) + gap + the tallest shape (the 360 px square) at its low spot.
@@ -113,8 +114,17 @@ function layout() {
   titleWord.style.fontSize = fontPx + 'px';
   title.style.cssText = `left:0;width:${W}px;top:${titleTop}px;height:${fontPx}px;text-align:center`;
   // shrink the mask to the word (plus side bearings) so its box is honest for the safe-area gate
-  const a = glyphs[0].offsetLeft, b = glyphs[glyphs.length - 1].offsetLeft + glyphs[glyphs.length - 1].offsetWidth;
-  const mw = Math.ceil(b - a + fontPx * 0.3);
+  const wordW = fs => {
+    const a = glyphs[0].offsetLeft, b = glyphs[glyphs.length - 1].offsetLeft + glyphs[glyphs.length - 1].offsetWidth;
+    return Math.ceil(b - a + fs * 0.3);
+  };
+  let mw = wordW(fontPx);
+  const maxW = Math.floor(S.w / (1 + PUSH));       // the camera push scales the word up to this
+  if (mw > maxW) {  // a wider fallback font (Linux, Windows): fit the word to the UI-safe width
+    const fs = Math.floor(fontPx * maxW / mw) - 1;
+    titleWord.style.fontSize = fs + 'px';
+    mw = wordW(fs);
+  }
   title.style.left = Math.round(cx - mw / 2) + 'px'; title.style.width = mw + 'px';
   // hud: bottom-left corner of the UI-safe rect
   hud.style.cssText = `left:${S.x}px;top:${S.y + S.h - 22}px`;
@@ -132,7 +142,7 @@ const morph = K.bezier(.45, 0, .15, 1);
 function render(t) {
   const D = window.MOTION.duration;
   // camera: slow continuous push, returns to 1.0 at the loop seam
-  const push = 1 + 0.035 * Math.sin(Math.PI * (t / D));
+  const push = 1 + PUSH * Math.sin(Math.PI * (t / D));
   camera.style.transform = `scale(${push})`;
 
   // blob: size/radius keyframes (closed form, eased), back to start at D
