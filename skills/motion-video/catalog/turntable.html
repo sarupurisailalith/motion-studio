@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Catalog turntable</title>
+<!--
+  MOTION STUDIO — catalog turntable (E11.4 / E11.6). One model, one full orbit per loop.
+  catalog.py turntable <id> <dir> writes this page with MODEL set, plus kit.js, kit-zdog.js,
+  models/<id>.js and vendor/ (Zdog). Then: render.py <dir>/<id>_turntable.html --check-only.
+  Preview: open it with ?model=<id> (any model in models/).
+-->
+<style>
+  html,body{margin:0;background:#000;overflow:hidden}
+  #stage{position:absolute;left:0;top:0;transform-origin:0 0;overflow:hidden;background:#F2EFE9}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script src="vendor/zdog.dist.min.js"></script>
+<script src="kit.js"></script>
+<script src="kit-zdog.js"></script>
+<script>
+const MODEL = new URLSearchParams(location.search).get('model') || 'pip';
+const K = window.K, TAU = Zdog.TAU;
+window.MOTION = K.init({ width: 720, height: 720, fps: 30, duration: 4, loop: true });
+const { W, H } = K.FORMAT, D = window.MOTION.duration;
+const stage = document.getElementById('stage');
+stage.style.width = W + 'px'; stage.style.height = H + 'px';
+const ctx = K.Z.canvas(W, H, stage).getContext('2d');
+let scene, cam, m, rig, view;
+
+const loadScript = src => new Promise((ok, fail) => {
+  const s = document.createElement('script'); s.src = src; s.onload = ok;
+  s.onerror = () => fail(new Error('turntable: could not load ' + src)); document.head.appendChild(s);
+});
+
+function build() {
+  scene = new Zdog.Anchor();
+  cam = K.Z.camera(scene);
+  m = K.Z.make(MODEL, cam.world);
+  // ground disc under the model (a contact shadow), drawn first
+  K.Z.layer(new Zdog.Ellipse({ addTo: cam.world, diameter: Math.max(m.size.w, m.size.d) * 1.25, rotate: { x: TAU / 4 },
+    fill: true, stroke: 0, color: 'rgba(30,42,36,0.16)' }), K.Z.LAYERS.SHADOW);
+  rig = m.joints.root ? K.Z.rig(m.joints) : null;
+  view = frame();
+}
+
+// Fit the model: its projected bounds over a full orbit (computed once, so it's seek-safe).
+function frame() {
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (let i = 0; i < 16; i++) {
+    cam.set({ yaw: TAU * i / 16, pitch: 0.32 });
+    scene.updateGraph();
+    scene.flatGraph.forEach(it => {
+      const r = (it.stroke || 0) / 2, o = it.renderOrigin;
+      x0 = Math.min(x0, o.x - r); x1 = Math.max(x1, o.x + r); y0 = Math.min(y0, o.y - r); y1 = Math.max(y1, o.y + r);
+    });
+  }
+  // anchor origins miss path extents, so the declared size is a floor
+  const ext = Math.max(x1 - x0, y1 - y0, m.size.w, m.size.h, m.size.d, 1), zoom = 0.62 * Math.min(W, H) / ext;
+  return { zoom, cx: W / 2 - zoom * (x0 + x1) / 2, cy: H / 2 - zoom * (y0 + y1) / 2 };
+}
+
+function render(t) {
+  const yaw = TAU * t / D - TAU / 8;              // one orbit per loop, starting at a 3/4 view
+  cam.set({ yaw, pitch: 0.32 });
+  if (rig) rig.pose(t, [{ clip: 'idle', period: D / 2 }]);
+  if (m.animate) m.animate(t, D);
+  if (m.blink) m.blink(t, [1.3]);
+  K.Z.render(scene, ctx, view);
+}
+
+window.ready = (async () => { await loadScript('models/' + MODEL + '.js'); build(); })();
+window.seek = async t => { await window.ready; render(t); };
+
+if (!new URLSearchParams(location.search).has('render')) {
+  const s = Math.min(innerWidth / W, innerHeight / H); stage.style.transform = `scale(${s})`;
+  window.ready.then(() => { const t0 = performance.now(); const tick = () => { window.seek(((performance.now() - t0) / 1000) % D); requestAnimationFrame(tick); }; tick(); });
+}
+</script>
+</body>
+</html>

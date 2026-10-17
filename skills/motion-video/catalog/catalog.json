@@ -1,0 +1,648 @@
+{
+ "version": 1,
+ "convention": "models/<id>.js registers K.Z.model(id, { palette, build(addTo, { palette, scale, ...options }) -> { root, joints, size, anchors } }); build one with K.Z.make(id, addTo, { palette, scale }). See references/zdog.md.",
+ "models": [
+  {
+   "id": "pip",
+   "kind": "character",
+   "tags": [
+    "mascot",
+    "character",
+    "round",
+    "friendly"
+   ],
+   "size": {
+    "w": 50,
+    "h": 80,
+    "d": 40
+   },
+   "joints": [
+    "root",
+    "hips",
+    "spine",
+    "neck",
+    "head",
+    "armL",
+    "armR",
+    "legL",
+    "legR"
+   ],
+   "palette": [
+    "primary",
+    "shade",
+    "neutral",
+    "ink",
+    "light"
+   ],
+   "clips": [
+    "idle",
+    "anticipate",
+    "hop",
+    "leap",
+    "land",
+    "run",
+    "wave",
+    "point",
+    "turn-to-camera",
+    "drop-in",
+    "spin-reveal"
+   ],
+   "anchors": [
+    "head",
+    "face",
+    "handL",
+    "handR",
+    "top"
+   ],
+   "source": "original (Motion Studio, 2026-10-16 spikes)",
+   "license": "Apache-2.0",
+   "preview": "pip.png",
+   "notes": "the Motion Studio mascot: round body and head, stick limbs; blink(t, times)"
+  },
+  {
+   "id": "bolt",
+   "kind": "character",
+   "tags": [
+    "robot",
+    "character",
+    "boxy",
+    "tech",
+    "friendly"
+   ],
+   "size": {
+    "w": 52,
+    "h": 94,
+    "d": 26
+   },
+   "joints": [
+    "root",
+    "hips",
+    "spine",
+    "neck",
+    "head",
+    "armL",
+    "armR",
+    "legL",
+    "legR"
+   ],
+   "palette": [
+    "primary",
+    "shade",
+    "neutral",
+    "accent",
+    "ink",
+    "light"
+   ],
+   "clips": [
+    "idle",
+    "anticipate",
+    "hop",
+    "leap",
+    "land",
+    "run",
+    "wave",
+    "point",
+    "turn-to-camera",
+    "drop-in",
+    "spin-reveal"
+   ],
+   "anchors": [
+    "head",
+    "face",
+    "handL",
+    "handR",
+    "top"
+   ],
+   "source": "original (Motion Studio)",
+   "license": "Apache-2.0",
+   "preview": "bolt.png",
+   "notes": "a small boxy robot with a visor face and antenna; same joints as pip, so every clip works; blink(t, times)"
+  },
+  {
+   "id": "parcel",
+   "kind": "prop",
+   "tags": [
+    "box",
+    "package",
+    "delivery",
+    "shipping",
+    "cardboard"
+   ],
+   "size": {
+    "w": 40,
+    "h": 32,
+    "d": 34
+   },
+   "joints": [
+    "root",
+    "hips"
+   ],
+   "palette": [
+    "primary",
+    "shade",
+    "light",
+    "accent"
+   ],
+   "clips": [
+    "drop-in",
+    "land",
+    "spin-reveal"
+   ],
+   "anchors": [
+    "top"
+   ],
+   "source": "original (Motion Studio, 2026-10-16 spikes)",
+   "license": "Apache-2.0",
+   "preview": "parcel.png",
+   "notes": "taped cardboard box; joints.hips squashes on landing"
+  },
+  {
+   "id": "coin",
+   "kind": "prop",
+   "tags": [
+    "coin",
+    "money",
+    "payment",
+    "reward",
+    "price"
+   ],
+   "size": {
+    "w": 44,
+    "h": 44,
+    "d": 6
+   },
+   "joints": [
+    "root"
+   ],
+   "palette": [
+    "primary",
+    "shade",
+    "light"
+   ],
+   "clips": [
+    "spin-reveal",
+    "drop-in"
+   ],
+   "anchors": [],
+   "source": "original (Motion Studio)",
+   "license": "Apache-2.0",
+   "preview": "coin.png",
+   "notes": "thick coin with a rim and a star mark on both faces; spin with root.rotate.y"
+  },
+  {
+   "id": "phone",
+   "kind": "prop",
+   "tags": [
+    "phone",
+    "mobile",
+    "device",
+    "app",
+    "smartphone"
+   ],
+   "size": {
+    "w": 40,
+    "h": 80,
+    "d": 8
+   },
+   "joints": [
+    "root"
+   ],
+   "palette": [
+    "primary",
+    "shade",
+    "light",
+    "accent"
+   ],
+   "clips": [
+    "spin-reveal",
+    "drop-in"
+   ],
+   "anchors": [
+    "screen"
+   ],
+   "source": "original (Motion Studio)",
+   "license": "Apache-2.0",
+   "preview": "phone.png",
+   "notes": "generic smartphone, no brand marks; anchors.screen to pin a real screenshot via K.Z.project"
+  },
+  {
+   "id": "chart-bars",
+   "kind": "prop",
+   "tags": [
+    "chart",
+    "bars",
+    "data",
+    "growth",
+    "graph",
+    "stats"
+   ],
+   "size": {
+    "w": 64,
+    "h": 64,
+    "d": 22
+   },
+   "joints": [
+    "root"
+   ],
+   "palette": [
+    "primary",
+    "accent",
+    "neutral",
+    "shade"
+   ],
+   "clips": [],
+   "anchors": [
+    "bars"
+   ],
+   "source": "original (Motion Studio)",
+   "license": "Apache-2.0",
+   "preview": "chart-bars.png",
+   "notes": "3D bar chart; options values: [0..1]; grow anchors.bars[i].scale.y. Real data only",
+   "options": {
+    "values": "[0..1, \u2026]",
+    "highlight": "bar index in accent (default last)"
+   }
+  },
+  {
+   "id": "house",
+   "kind": "prop",
+   "tags": [
+    "house",
+    "home",
+    "building",
+    "real-estate",
+    "town"
+   ],
+   "size": {
+    "w": 56,
+    "h": 54,
+    "d": 46
+   },
+   "joints": [
+    "root"
+   ],
+   "palette": [
+    "primary",
+    "shade",
+    "accent",
+    "ink",
+    "light"
+   ],
+   "clips": [
+    "drop-in",
+    "spin-reveal"
+   ],
+   "anchors": [
+    "door"
+   ],
+   "source": "original (Motion Studio)",
+   "license": "Apache-2.0",
+   "preview": "house.png",
+   "notes": "small gabled house with door, window and chimney"
+  },
+  {
+   "id": "plant",
+   "kind": "prop",
+   "tags": [
+    "plant",
+    "pot",
+    "leaf",
+    "growth",
+    "office",
+    "nature"
+   ],
+   "size": {
+    "w": 46,
+    "h": 62,
+    "d": 30
+   },
+   "joints": [
+    "root"
+   ],
+   "palette": [
+    "primary",
+    "shade",
+    "accent",
+    "light"
+   ],
+   "clips": [],
+   "anchors": [
+    "leaves"
+   ],
+   "source": "original (Motion Studio)",
+   "license": "Apache-2.0",
+   "preview": "plant.png",
+   "notes": "potted plant with five leaves; sway anchors.leaves[i].rotate.z for a breeze"
+  },
+  {
+   "id": "pine",
+   "kind": "scene-kit",
+   "tags": [
+    "tree",
+    "pine",
+    "forest",
+    "conifer",
+    "nature"
+   ],
+   "size": {
+    "w": 30,
+    "h": 49,
+    "d": 30
+   },
+   "joints": [
+    "root"
+   ],
+   "palette": [
+    "primary",
+    "shade",
+    "neutral"
+   ],
+   "clips": [],
+   "anchors": [
+    "top"
+   ],
+   "source": "original (Motion Studio, 2026-10-16 spikes)",
+   "license": "Apache-2.0",
+   "preview": "pine.png",
+   "notes": "three-tier conifer; scatter with K.rand for a tree line"
+  },
+  {
+   "id": "round-tree",
+   "kind": "scene-kit",
+   "tags": [
+    "tree",
+    "round",
+    "forest",
+    "park",
+    "nature"
+   ],
+   "size": {
+    "w": 32,
+    "h": 50,
+    "d": 32
+   },
+   "joints": [
+    "root"
+   ],
+   "palette": [
+    "primary",
+    "light",
+    "neutral"
+   ],
+   "clips": [],
+   "anchors": [
+    "crown"
+   ],
+   "source": "original (Motion Studio, 2026-10-16 spikes)",
+   "license": "Apache-2.0",
+   "preview": "round-tree.png",
+   "notes": "lollipop tree with a lit crown"
+  },
+  {
+   "id": "rock",
+   "kind": "scene-kit",
+   "tags": [
+    "rock",
+    "boulder",
+    "stone",
+    "nature",
+    "moss"
+   ],
+   "size": {
+    "w": 38,
+    "h": 26,
+    "d": 32
+   },
+   "joints": [
+    "root"
+   ],
+   "palette": [
+    "primary",
+    "shade",
+    "accent"
+   ],
+   "clips": [],
+   "anchors": [
+    "top"
+   ],
+   "source": "original (Motion Studio)",
+   "license": "Apache-2.0",
+   "preview": "rock.png",
+   "notes": "lumpy boulder with a mossy cap; options seed varies the lumps",
+   "options": {
+    "seed": "int"
+   }
+  },
+  {
+   "id": "stepping-stone",
+   "kind": "scene-kit",
+   "tags": [
+    "stone",
+    "stepping",
+    "river",
+    "path",
+    "nature"
+   ],
+   "size": {
+    "w": 30,
+    "h": 8,
+    "d": 30
+   },
+   "joints": [
+    "root"
+   ],
+   "palette": [
+    "primary",
+    "shade",
+    "accent"
+   ],
+   "clips": [],
+   "anchors": [
+    "top"
+   ],
+   "source": "original (Motion Studio)",
+   "license": "Apache-2.0",
+   "preview": "stepping-stone.png",
+   "notes": "flat round stone with moss; origin on the top face for a character's feet",
+   "options": {
+    "diameter": "px",
+    "height": "px"
+   }
+  },
+  {
+   "id": "ground-block",
+   "kind": "scene-kit",
+   "tags": [
+    "ground",
+    "terrain",
+    "path",
+    "platform",
+    "course",
+    "block"
+   ],
+   "size": {
+    "w": 120,
+    "h": 60,
+    "d": 60
+   },
+   "joints": [
+    "root"
+   ],
+   "palette": [
+    "primary",
+    "shade",
+    "neutral",
+    "ink"
+   ],
+   "clips": [],
+   "anchors": [
+    "top"
+   ],
+   "source": "original (Motion Studio, 2026-10-16 spikes)",
+   "license": "Apache-2.0",
+   "preview": "ground-block.png",
+   "notes": "terrain slab with a coloured top and strata seams; line several up for a course",
+   "options": {
+    "width": "px",
+    "depth": "px",
+    "height": "px"
+   }
+  },
+  {
+   "id": "stream",
+   "kind": "scene-kit",
+   "tags": [
+    "water",
+    "stream",
+    "river",
+    "ripples",
+    "nature"
+   ],
+   "size": {
+    "w": 90,
+    "h": 30,
+    "d": 60
+   },
+   "joints": [
+    "root"
+   ],
+   "palette": [
+    "primary",
+    "light",
+    "accent"
+   ],
+   "clips": [],
+   "anchors": [
+    "ripples"
+   ],
+   "source": "original (Motion Studio, 2026-10-16 spikes)",
+   "license": "Apache-2.0",
+   "preview": "stream.png",
+   "notes": "water channel with ripples; animate(t, D) drifts them periodically",
+   "options": {
+    "width": "px",
+    "depth": "px",
+    "height": "px"
+   }
+  },
+  {
+   "id": "icon-star",
+   "kind": "icon",
+   "tags": [
+    "star",
+    "rating",
+    "favourite",
+    "icon",
+    "award"
+   ],
+   "size": {
+    "w": 52,
+    "h": 50,
+    "d": 12
+   },
+   "joints": [
+    "root"
+   ],
+   "palette": [
+    "primary",
+    "shade"
+   ],
+   "clips": [
+    "spin-reveal",
+    "drop-in"
+   ],
+   "anchors": [],
+   "source": "original (Motion Studio)",
+   "license": "Apache-2.0",
+   "preview": "icon-star.png",
+   "notes": "chunky extruded five-point star"
+  },
+  {
+   "id": "icon-heart",
+   "kind": "icon",
+   "tags": [
+    "heart",
+    "like",
+    "love",
+    "care",
+    "icon"
+   ],
+   "size": {
+    "w": 46,
+    "h": 46,
+    "d": 12
+   },
+   "joints": [
+    "root"
+   ],
+   "palette": [
+    "primary",
+    "shade"
+   ],
+   "clips": [
+    "spin-reveal",
+    "drop-in"
+   ],
+   "anchors": [],
+   "source": "original (Motion Studio)",
+   "license": "Apache-2.0",
+   "preview": "icon-heart.png",
+   "notes": "extruded heart"
+  },
+  {
+   "id": "icon-check",
+   "kind": "icon",
+   "tags": [
+    "check",
+    "done",
+    "success",
+    "tick",
+    "icon"
+   ],
+   "size": {
+    "w": 48,
+    "h": 48,
+    "d": 10
+   },
+   "joints": [
+    "root"
+   ],
+   "palette": [
+    "primary",
+    "shade",
+    "light"
+   ],
+   "clips": [
+    "spin-reveal",
+    "drop-in"
+   ],
+   "anchors": [
+    "mark"
+   ],
+   "source": "original (Motion Studio)",
+   "license": "Apache-2.0",
+   "preview": "icon-check.png",
+   "notes": "check mark on a round badge; anchors.mark to draw it on"
+  }
+ ]
+}
