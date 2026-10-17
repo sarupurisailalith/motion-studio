@@ -15,12 +15,15 @@ Gates, each reported as pass, WARN or FAIL (any FAIL -> exit code 1):
                    "sparse" when its true peak is within 3 dB of full scale (SFX-only pieces that
                    mix.py peak-normalised: short sounds can't get louder without distortion)
   sync       FAIL  with --sync sfx_events.json: each transient SFX within ±20 ms of its hit (sync.py)
+  av_sync    FAIL  with --edl edl.json (footage): each EDL segment's voice within 1 frame of its
+                   source audio, by cross-correlation (cut.py sync)
 
 Outputs: the JSON report on stdout (and in --json FILE), plus a 4x4 QA contact sheet
 <video stem>_qa_sheet.png next to the video (never the _sheet.png that render.py --deliver writes).
 
 Usage: python3 check.py renders/comp.mp4 [--loop] [--max-hold 1.0] [--json renders/comp_qa.json]
        python3 check.py renders/comp.mp4 --sync audio/sfx_events.json
+       python3 check.py renders/comp.mp4 --edl edl.json        # footage: lip sync at every cut
 """
 import argparse, json, re, subprocess, sys
 from pathlib import Path
@@ -58,6 +61,7 @@ def main():
     ap.add_argument("--no-sheet", action="store_true", help="skip the QA contact sheet")
     ap.add_argument("--json", type=Path, metavar="FILE", help="also write the JSON report to FILE")
     ap.add_argument("--sync", type=Path, metavar="SFX_EVENTS", help="sfx_events.json: add the sync gate")
+    ap.add_argument("--edl", type=Path, metavar="EDL", help="edl.json (footage pieces): add the av_sync gate")
     a = ap.parse_args()
 
     fr, fps, info = frames_gray(a.video)
@@ -129,6 +133,17 @@ def main():
             rep = sync.run(_audio.load(a.video, _audio.SR), _audio.SR, a.sync)
             res["sync"] = rep["hits"]
             res["gates"]["sync"] = rep["status"]
+
+    # footage A/V sync: every EDL segment's voice vs its source audio (same as cut.py sync)
+    if a.edl:
+        if not any(s["codec_type"] == "audio" for s in info["streams"]):
+            res["gates"]["av_sync"] = "FAIL no audio stream to check against the EDL"
+        else:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            import _audio, cut
+            rep = cut.avsync(_audio.load(a.video, _audio.SR), _audio.SR, cut.load_edl(a.edl), a.edl.parent)
+            res["av_sync"] = rep["segments"]
+            res["gates"]["av_sync"] = rep["status"]
 
     # contact sheet
     if not a.no_sheet:
