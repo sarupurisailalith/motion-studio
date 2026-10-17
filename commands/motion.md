@@ -20,33 +20,40 @@ names. Pass `--quiet` to render.py. Keep script output out of replies; quote num
    `P/brief.md`, and ask in one batch only for what the user alone can supply (real assets,
    exact copy or numbers, the song, platform). Default the rest and state it.
    Asset paths or chat attachments → `python3 $S/ingest.py P <paths…>` first (`--attached`
-   for uploads), and use the asset ids in the brief. Never invent assets or claims.
+   for uploads), and use the asset ids in the brief. Never invent assets or claims; flag
+   domain-standard defaults (e.g. a recipe ratio) as `[[DEFAULT: confirm or replace]]`.
+   A reference video or stills (local files only; never download one) →
+   `python3 $S/reference.py <ref> P`, look at `P/docs/reference/<name>/sheet.png` and
+   `shots.png`, and fill `references/style_guide.md` into `P/style_guide.md` before step 3.
 2. **Dependencies**, once: `python3 $S/render.py --help` and `ffmpeg -version`. On failure,
    print and stop: `pip install playwright numpy pillow`,
    `python3 -m playwright install chromium`, ffmpeg (`brew install ffmpeg` /
    `apt install ffmpeg` / `winget install ffmpeg`).
 3. **Sign-off gate.** Show the storyboard table and the format list (`F`, e.g. `9x16,1x1`,
    from `<formats>`). If the user is present, stop and wait for approval. In unattended runs,
-   continue and state the assumption.
+   continue: write the assumption into the brief's `<start>` (e.g. "unattended: storyboard not
+   signed off; proceeded with 9x16,1x1") and repeat it in the final reply.
 4. **Build.** Copy `templates/composition.html` (or `three-composition.html`) **and**
    `templates/kit.js` into `P`. If a track was supplied, run
    `python3 $S/beats.py --track <song> --duration D --out P` before timing any scene, and
    include `beats.js` before the kit script. Lay out per format with `K.pick`, keep
    `[data-safe]` text inside `K.safe.ui`, put the brief's hits in `MOTION.hits`.
 5. **Review.** `R="python3 $S/render.py"`. `$R P/<slug>.html --format F --check-only` (gates:
-   determinism, loop seam, safe_area, text_duration) → fix every FAIL. Then `--format F --sheet`
+   determinism, loop seam, safe_area, text_duration, contrast) → fix every FAIL; fix or explain
+   each WARN. Add `--thorough` before a hero render (denser samples; a pass is never proof). Then `--format F --sheet`
    and look at **one sheet per format**: a self-check for broken frames, clipping, unreadable
    type. Use `--stills`/`--strip A:B:N`/`--phone` only to diagnose a specific problem.
 6. **Render.** `$R P/<slug>.html --format F --deliver --subframes 3` (`--gl` for WebGL) →
-   `P/renders/<slug>_<fmt>.mp4`, posters, sheets, `deliver.json`.
+   `P/renders/<slug>_<fmt>.mp4`, posters, sheets, phone sheets, `deliver.json`.
 7. **Audio** (only if the brief has music or SFX; detail in `/motion-audio`):
    `$R P/<slug>.html --hits` → `python3 $S/sfx.py P/renders/<slug>_hits.json --out P/audio/sfx.wav`
    → `python3 $S/mix.py --duration D --out P/audio/mix.wav [--music P/music.wav]
    [--sfx P/audio/sfx.wav] --mux <every P/renders/<slug>_<fmt>.mp4>`.
    Music is user-supplied only; never fetch songs.
 8. **QA.** `python3 $S/check.py <each mp4> --json P/renders/<slug>_<fmt>_qa.json` (`--loop` if
-   MOTION.loop; with SFX add `--sync P/audio/sfx_events.json`). Fix FAILs; fix or explain WARNs
-   (`frozen` is coarse: look at the frames before "fixing" it).
+   MOTION.loop; with SFX add `--sync P/audio/sfx_events.json`; with a reference add
+   `--against P/docs/reference/<name>/cuts.json`). Fix FAILs; fix or explain WARNs (`frozen`
+   means no 40 px region visibly moved for that long: fix it, or say the breather is intended).
 9. **Critic rounds: only on request.** Skip this step unless `$ARGUMENTS` has `--review [N]`,
    the user asks ("review it", "polish it", "critic"), or the brief's `<review>` sets rounds.
    Rounds = N, else the brief's `<review>`, else 2 (3 for hero pieces). Each round:

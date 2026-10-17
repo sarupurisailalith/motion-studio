@@ -278,9 +278,10 @@ keeping the look identical.
   <img src="docs/assets/gates-light.png" alt="QA gates: determinism, loop seam, safe area, text on screen ≥ 8 frames, sound sync ±20 ms, −14 LUFS" width="100%">
 </picture>
 
-`render.py` checks determinism, the loop seam, safe areas and text duration before the full
-render. `check.py` checks the MP4 for blank frames, single-frame pops, frozen stretches, the loop
-seam and loudness. `sync.py` measures where each SFX lands against its hit. Any FAIL blocks delivery.
+`render.py` checks determinism, the loop seam, safe areas, text duration and text contrast
+(≥ 4.5:1 against what's rendered behind the words) before the full render. `check.py` checks the
+MP4 for blank frames, single-frame pops, frozen stretches, the loop seam and loudness, and with
+`--against` compares its pacing with a reference you supplied (`reference.py`). `sync.py` measures where each SFX lands against its hit. Any FAIL blocks delivery.
 
 ## Previewing a composition
 
@@ -300,7 +301,7 @@ servers; it only runs the scripts below, when the agent or you invoke them.
 | What runs | What it does | Network |
 |---|---|---|
 | `render.py` | Serves the composition folder on `127.0.0.1` (random port, local only), drives headless Chromium through Playwright, pipes frames to ffmpeg | None needed. Compositions the plugin builds load libraries from a local `vendor/` folder; your own HTML that links to remote URLs is fetched like in any browser |
-| `check.py`, `sync.py`, `beats.py`, `sfx.py`, `mix.py` | Analyse and mix audio and video with ffmpeg/ffprobe and numpy | None |
+| `check.py`, `sync.py`, `beats.py`, `sfx.py`, `mix.py`, `reference.py` | Analyse and mix audio and video with ffmpeg/ffprobe and numpy (`reference.py` reads only a local video or images you name) | None |
 | `ingest.py` | Copies your asset files into `motion/<slug>/assets/`, sanitising SVGs and converting clips with ffmpeg | None |
 | `vendor.py` | Copies three.js, GSAP or lottie into `vendor/` so renders stay offline | Downloads exact pinned versions (`three@0.186.1`, `gsap@3.15.0`, `lottie-web@5.13.0`) from the npm registry |
 | Setup (you run it once) | `pip install …` and `python3 -m playwright install chromium` | PyPI and Playwright's Chromium download host |
@@ -337,8 +338,9 @@ Motion Studio collects no data. See [PRIVACY.md](PRIVACY.md). To report a vulner
 |---|---|
 | `skills/motion-video/` | The workflow skill: brief template, genre playbooks, craft numbers, production notes, engine gotchas, formats, audio and assets references, two starter templates, and the scripts below. |
 | `skills/motion-video/templates/` | `composition.html` (2D) and `three-composition.html` (Three.js), both built on `kit.js`: the shared motion kit (springs, keyframes, seeded noise, formats and safe areas, beat timing, hits, video clips). Copy the template **and** `kit.js`. |
-| `skills/motion-video/scripts/render.py` | Headless-Chromium renderer: seeks every frame via `window.seek(t)`, sub-frame motion blur, parallel workers, `--format`, `--deliver` bundle, review renders (`--sheet --phone --strip --poster --contact beats`), `--hits`, and the gates: determinism, loop seam, safe area, text duration. |
-| `skills/motion-video/scripts/check.py` | QA on the MP4: blank frames, single-frame pops, frozen stretches, loop seam, loudness, `--sync`, contact sheet. |
+| `skills/motion-video/scripts/render.py` | Headless-Chromium renderer: seeks every frame via `window.seek(t)`, sub-frame motion blur, parallel workers, `--format`, `--deliver` bundle, review renders (`--sheet --phone --strip --poster --contact beats`), `--hits`, and the gates: determinism, loop seam, safe area, text duration, text contrast. |
+| `skills/motion-video/scripts/check.py` | QA on the MP4: blank frames, single-frame pops, frozen stretches, loop seam, loudness, `--sync`, `--against` (pacing vs. a reference), contact sheet. |
+| `skills/motion-video/scripts/reference.py` | Studies a local reference video or stills: hard cuts, one frame per shot, a 1 fps sheet and motion stats in `cuts.json`. Never downloads. |
 | `skills/motion-video/scripts/beats.py` | Beat grid from your track (BPM, downbeats, sections; cuts the best window) or a fixed `--grid`. Writes `beats.js` for the kit. |
 | `skills/motion-video/scripts/sfx.py` | Synthesized SFX palette (whoosh, tick, thud, riser, impact …) placed sample-accurately on `MOTION.hits`. |
 | `skills/motion-video/scripts/mix.py` | Mixes music, SFX and voice-over, ducks music under VO, masters to −14 LUFS / −1 dBTP, muxes into every format. |

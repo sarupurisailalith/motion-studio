@@ -21,7 +21,15 @@ Fill every field of `references/brief-template.md` (deliverable, formats, one-li
 hex palette, fonts, locked copy, storyboard, motion rules, audio + hits, banned list, review
 rounds if wanted, approval gate). Adapt the closest playbook in `references/genres.md`.
 - Ask only for real assets, exact copy/numbers, the song, platform. Default the rest and say
-  so. Never invent claims, metrics or quotes.
+  so. Never invent claims, metrics or quotes. Domain-standard defaults (a published recipe
+  ratio, a unit conversion, a well-known public fact) are not invented: use them when the genre
+  needs them, mark them `[[DEFAULT: confirm or replace]]` in the brief and list them in the final
+  reply. Numbers about the user's product, company or results (metrics, prices, benchmarks,
+  quotes) are never defaulted: ask, or leave them out.
+- **Reference given** (a video or stills the user supplied; local files only, never fetch one):
+  `python3 $S/reference.py <ref> P` → `P/docs/reference/<name>/` (cuts.json, sheet.png,
+  shots.png). Look at the sheets, then fill `references/style_guide.md` into `P/style_guide.md`
+  **before the storyboard**: take its rhythm, motion and composition; keep the user's brand.
 - **Assets** (logo, screenshots, fonts, clips, audio, brand PDF; local paths or chat uploads):
   `python3 $S/ingest.py P <paths…> [--attached]` copies and normalises them into `P/assets/`
   with `assets.json`. Refer to them by id; use them as-is, never redraw or stand in for one.
@@ -31,7 +39,8 @@ rounds if wanted, approval gate). Adapt the closest playbook in `references/genr
 Table: `time | on screen | purpose | exit | carried object`. About one idea per 1–2 s; hook in
 the first 0.5–2 s; frame 0 is a finished picture; a breather before the climax; a held final
 lockup (≈1 s). With music, pin scene changes to beats. If the user is present, show the
-storyboard and format list and wait for approval; otherwise continue and state the assumption.
+storyboard and format list and wait for approval; otherwise continue, write the assumption into
+the brief's `<start>` and repeat it in the final reply.
 
 ### 3. Build from a template
 Copy the template **and `templates/kit.js`** into `P` (the template loads the kit from its own
@@ -55,8 +64,9 @@ timeline; only layout changes per format, via `K.pick({ '9x16': …, default: �
 `K.FORMAT.isPortrait`. Place text from `K.safe.ui` (9x16 reserves top 12 %, bottom 22 %,
 right 14 % for platform chrome) and centre portrait groups on it.
 - Mark titles, captions, logos, CTAs with `data-safe` (box must stay inside `K.safe.ui`) and
-  every text element with `data-text` (must be readable ≥ 8 frames). Put `data-text` on the
-  element that shows the words, not an always-opaque mask.
+  every text element with `data-text` (must be readable ≥ 8 frames, at ≥ 4.5:1 contrast with
+  what's rendered behind its words). Put `data-text` on the element that shows the words, not an
+  always-opaque mask.
 - The gates read opacity, not masks: text sliding in from off-stage or rising through a mask
   stays at **opacity 0 until it is in place**, and returns to 0 after it leaves.
 
@@ -70,13 +80,16 @@ Read `references/craft.md` while building and `references/gotchas.md` for engine
 ### 4. Review loop (cheap → expensive)
 ```bash
 R="python3 $S/render.py"; F=9x16,1x1          # the brief's formats
-$R P/<slug>.html --format $F --check-only      # gates: determinism, loop_seam, safe_area, text_duration, page errors
+$R P/<slug>.html --format $F --check-only      # gates: determinism, loop_seam, safe_area, text_duration, contrast, page errors
 $R P/<slug>.html --format $F --sheet           # 4x4 sheet per format: LOOK at each (add --phone for critic rounds)
 $R P/<slug>.html --stills 0,2.5,4,7.9          # specific moments
 $R P/<slug>.html --strip 2:3:6 --subframes 4   # blurred strip across a transition
 $R P/<slug>.html --poster 7.5                  # the thumbnail frame (value after the HTML path)
 $R P/<slug>.html --contact beats               # one still per downbeat (needs beats.js)
 ```
+Gates sample fixed times (determinism: 8 from a fixed seed; safe_area and contrast: every 0.25 s),
+so a pass is evidence, not proof; `--check-only --thorough` samples densely before a hero render.
+`--sheet` keeps its 16 stills in `renders/stills/`.
 By default run `--check-only`, then `--sheet`, and look at **one sheet per format**; the other
 renders are for diagnosing a specific problem or for critic rounds. Judge like a harsh director:
 is every paused frame a poster? Type readable, nothing overlapping, clipped or off-brand? Fix
@@ -87,12 +100,14 @@ every FAIL, then the worst issue first; patch, don't rewrite; re-check.
 $R P/<slug>.html --format $F --deliver --subframes 3 [--gl] [--workers 4] [--scale 2]
 python3 $S/check.py P/renders/<slug>_<fmt>.mp4 [--loop] [--max-hold 1.0] [--sync P/audio/sfx_events.json]
 ```
-- `--deliver` → `renders/<slug>_<fmt>.mp4`, `_poster.png`, `_sheet.png` per format and
-  `renders/deliver.json` (ffprobe facts). Without `--format`: one native render, no suffix.
+- `--deliver` → `renders/<slug>_<fmt>.mp4`, `_poster.png`, `_sheet.png`, `_sheet_phone.png` per
+  format and `renders/deliver.json` (ffprobe facts). Without `--format`: one native render, no suffix.
 - `--subframes N` = real motion blur (3–4 for UI, 6–8 for fast whips). `--scale 2` supersamples
   (crisper type; 4× slower). `--gl` for WebGL/Three/shaders. `--preview` = first 5 s, half res.
-- check.py gates: blank frames, single-frame pops, frozen stretches, loop seam, loudness,
-  `sync`. Fix every FAIL; fix or explain every WARN. Cost ≈ 0.1–0.3 s per sample per worker.
+- check.py gates: blank frames, single-frame pops, frozen stretches (no 40 px region visibly
+  moves), loop seam, loudness, `sync`; with a reference, `--against
+  P/docs/reference/<name>/cuts.json` flags pacing > 30 % slower or busier. Fix every FAIL; fix or
+  explain every WARN. Cost ≈ 0.1–0.3 s per sample per worker.
 
 ### 6. Sound (only if the brief has music or SFX)
 Follow `references/audio.md` (or `/motion-audio`). Music is user-supplied only; never fetch
@@ -121,7 +136,8 @@ if rounds ran, the last scores and verdict; otherwise offer "say *review it* for
 ## Token economy
 - Write the composition once; afterwards change it with small edits, never a full rewrite.
 - Read a reference only when needed: audio.md with sound, assets.md with assets, formats.md
-  with several formats, genres.md for the brief, craft.md and gotchas.md while building.
+  with several formats, genres.md for the brief, craft.md and gotchas.md while building,
+  style_guide.md only when the user gave a reference.
 - Look only at the images a step names; each image read is expensive. `render.py --quiet`.
 - Quote numbers from reports (gates, LUFS, offsets), not whole logs.
 
@@ -134,10 +150,13 @@ each with one line of evidence (timestamp or sheet tile):
 - **motion**: arrive fast, land soft; no linear or mushy moves, pops, dead holds > 1 s.
 - **variety**: something new every 2–4 s.
 - **brand**: supplied assets as-is (a redrawn or stand-in asset scores ≤ 5); brief hexes and
-  fonts; no banned effects; no unsupplied claim, number or logo.
+  fonts; no banned effects; no unsupplied claim, number or logo (flagged domain-standard defaults
+  are fine). Motion and timing faults belong under motion, not brand.
 - **sync**: cuts and hits on beats/SFX, sync offsets ≤ 20 ms (`n/a` if silent).
 - **concept**: the one-line idea is legible; the hero is the most memorable thing.
 
+WARNs (`frozen`, `contrast`, `pacing`) are measurements: confirm them on the frames before
+docking a score. Every fix must fit the frame: text and key subjects inside `K.safe.ui`.
 Verdict: `ship` only if every applicable score is ≥ 8 **and** 0 FAIL gates; else `one more pass`.
 Output (appended to `critique.md`; round N = earlier `## Round` headings + 1):
 ```
