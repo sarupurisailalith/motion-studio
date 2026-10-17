@@ -19,6 +19,8 @@ Usage:
   python3 render.py comp.html --workers 4             # parallel render (default: the CPUs, max 6)
   python3 render.py comp.html --capture screenshot    # v0.2 capture (default auto: CDP screenshots, or the
                                                       # canvas itself when the page is one canvas; same pixels)
+  python3 render.py comp.html --no-cache              # always render (default: a rerun with unchanged page files
+                                                      # and flags reuses renders/.cache/ and only re-muxes --audio)
 
   python3 render.py comp.html --format 16x9,9x16      # one render per format -> comp_16x9.mp4, comp_9x16.mp4
                                                       # (page gets ?format=&w=&h=; formats: 16x9 9x16 1x1 4x5)
@@ -109,6 +111,7 @@ SEEK_PLAIN_JS = """async t => {
 # E8.1 canvas fast path. CANVAS_PROBE_JS: is the picture exactly one <canvas> filling the viewport
 # at device-pixel size, with nothing else that renders? -> {kind, alpha} or {why}.
 CANVAS_PROBE_JS = """() => {
+  if (!document.body) return { why: 'no <body>' };
   const cs = document.querySelectorAll('canvas');
   if (cs.length !== 1) return { why: cs.length + ' <canvas> elements' };
   const c = cs[0], r = c.getBoundingClientRect(), dpr = window.devicePixelRatio;
@@ -174,7 +177,10 @@ CANVAS_SNAP_JS = """async ({ t, alpha }) => {
 async def canvas_snap(page, t, mode):
     """PNG straight from the composition's canvas (no compositor pass), or None when the page
     no longer qualifies (then the caller takes a screenshot)."""
-    url = await page.evaluate(CANVAS_SNAP_JS, {"t": t, "alpha": mode["alpha"]})
+    try:
+        url = await page.evaluate(CANVAS_SNAP_JS, {"t": t, "alpha": mode["alpha"]})
+    except Exception:  # e.g. a lost WebGL context: the screenshot path decides what happens
+        return None
     return base64.b64decode(url[url.index(",") + 1:]) if url else None
 
 
