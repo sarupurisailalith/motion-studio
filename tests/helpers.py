@@ -64,3 +64,49 @@ HAS_FFMPEG = bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
 slow = unittest.skipIf(FAST, "slow test (MOTION_FAST=1)")
 needs_chromium = unittest.skipUnless(HAS_CHROMIUM, "playwright chromium not installed")
 needs_ffmpeg = unittest.skipUnless(HAS_FFMPEG, "ffmpeg/ffprobe not on PATH")
+
+
+_VENDOR_CACHE = {}
+
+
+def vendored(*names) -> Path:
+    """A vendor/ folder holding the named vendor.py packages (zdog, p5, ...), downloaded once per
+    test run into a temp dir. Raises unittest.SkipTest (with the reason) when npm or the
+    network is unavailable, so offline runs skip these tests cleanly."""
+    key = tuple(sorted(names))
+    if key not in _VENDOR_CACHE:
+        if not shutil.which("npm"):
+            _VENDOR_CACHE[key] = unittest.SkipTest("npm not on PATH: can't vendor " + ", ".join(key))
+        else:
+            d = tmpdir()
+            try:
+                r = run_script("vendor.py", d, *key, timeout=300)
+                ok = r.returncode == 0
+            except subprocess.TimeoutExpired:
+                ok, r = False, None
+            missing = not ok or not (d / "vendor" / "vendor.json").exists()
+            _VENDOR_CACHE[key] = (unittest.SkipTest(
+                f"vendor.py {' '.join(key)} failed (offline?): " + ((r.stderr or r.stdout)[-300:] if r else "timeout"))
+                if missing else d / "vendor")
+    v = _VENDOR_CACHE[key]
+    if isinstance(v, unittest.SkipTest):
+        raise v
+    return v
+
+
+def with_vendor(dst_dir, *names) -> Path:
+    """Copy vendored(*names) into dst_dir/vendor (skips the calling test when offline)."""
+    src = vendored(*names)
+    shutil.copytree(src, Path(dst_dir) / "vendor", dirs_exist_ok=True)
+    return Path(dst_dir) / "vendor"
+
+
+def find_ttf():
+    """Any local TrueType font (test fixtures that call loadFont / Zfont need one), or None."""
+    for d in ["/System/Library/Fonts/Supplemental", "/Library/Fonts", "/usr/share/fonts",
+              "/usr/local/share/fonts", str(Path.home() / "Library/Fonts"), "C:/Windows/Fonts"]:
+        p = Path(d)
+        if p.is_dir():
+            for f in sorted(p.rglob("*.ttf")):
+                return f
+    return None
