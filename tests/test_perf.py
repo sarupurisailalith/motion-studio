@@ -122,5 +122,60 @@ class Capture(unittest.TestCase):
         self.assertEqual(fast, old)
 
 
+def greys(mp4):
+    """Mean grey level of each decoded frame."""
+    import numpy as np
+    r = subprocess.run(["ffmpeg", "-v", "error", "-i", str(mp4), "-vf", "scale=1:1:flags=area", "-f", "rawvideo",
+                        "-pix_fmt", "rgb24", "-"], capture_output=True, check=True)
+    return np.frombuffer(r.stdout, np.uint8).reshape(-1, 3)[:, 0].astype(int).tolist()
+
+
+class WorkersDefault(unittest.TestCase):
+    def test_default_is_cpu_count_max_6(self):
+        import os, sys
+        sys.path.insert(0, str(helpers.SCRIPTS))
+        import render as R
+        self.assertEqual(R.build_parser().parse_args(["x.html"]).workers, max(1, min(6, os.cpu_count() or 2)))
+
+
+@helpers.slow
+@helpers.needs_chromium
+@helpers.needs_ffmpeg
+class Workers(unittest.TestCase):
+    """E8.3: worker segments start on frame boundaries; no frame is duplicated or lost."""
+
+    def test_every_frame_once_in_order(self):
+        html = fixture("frames.html")
+        for w in (1, 3, 6):  # 6 asks for more workers than seconds: clamped to 3
+            with self.subTest(workers=w):
+                mp4 = html.parent / f"w{w}.mp4"
+                r = render(html, "--skip-checks", "--workers", w, "-o", mp4)
+                self.assertEqual(r.returncode, 0, r.stderr)
+                self.assertIn(f"with {min(w, 3)} worker(s)", r.stdout)
+                g = greys(mp4)
+                self.assertEqual(len(g), 72)
+                self.assertEqual([round((v - 10) / 3) for v in g], list(range(72)))
+
+    def test_gate_catches_a_wrong_count(self):
+        import sys
+        sys.path.insert(0, str(helpers.SCRIPTS))
+        import render as R
+        mp4 = tmpdir() / "ten.mp4"
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=64x64:rate=10:duration=1",
+                        "-pix_fmt", "yuv420p", str(mp4)], check=True)
+        self.assertEqual(R.count_frames(mp4), 10)
+        R.gate_frame_count(mp4, 10, None)
+        with self.assertRaises(SystemExit) as e:
+            R.gate_frame_count(mp4, 11, None)
+        self.assertIn("has 10 frames, expected 11", str(e.exception))
+        R.gate_frame_count(mp4, 11, "track.wav")  # -shortest with a short track: a warning only
+
+    def test_frame_count_gate_with_subframes(self):
+        html = fixture("frames.html")
+        r = render(html, "--skip-checks", "--workers", "3", "--subframes", "3", "--shutter", "0.01")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(len(greys(html.parent / "renders" / "frames.mp4")), 72)
+
+
 if __name__ == "__main__":
     unittest.main()

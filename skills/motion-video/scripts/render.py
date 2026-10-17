@@ -16,7 +16,7 @@ Usage:
   python3 render.py comp.html --check-only            # gates only, no video: determinism, loop seam,
                                                       # safe_area ([data-safe] inside K.safe.ui),
                                                       # text_duration ([data-text] visible >= 8 frames)
-  python3 render.py comp.html --workers 4             # parallel render (default: half the CPUs, max 4)
+  python3 render.py comp.html --workers 4             # parallel render (default: the CPUs, max 6)
   python3 render.py comp.html --capture screenshot    # v0.2 capture (default auto: CDP screenshots, or the
                                                       # canvas itself when the page is one canvas; same pixels)
 
@@ -674,6 +674,42 @@ async def run_gates(page, a, M, D, fps, report):
     vlog("gate text_duration:", report["gates"]["text_duration"])
 
 
+def mux_cmd(src, a, out: Path):
+    """ffmpeg command: video from the input args `src` (stream copy) plus --audio, if any, -> out."""
+    cmd = ["ffmpeg", "-y", "-loglevel", "error", *src]
+    if a.audio:
+        cmd += ["-i", str(a.audio), "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest"]
+        if not a.no_loudnorm:
+            cmd += ["-af", "loudnorm=I=-14:TP=-1.5:LRA=11"]
+    else:
+        cmd += ["-c", "copy"]
+    return cmd + ["-movflags", "+faststart", str(out)]
+
+
+def count_frames(video: Path):
+    """Video frames (packets) in a file, or None without ffprobe."""
+    if not shutil.which("ffprobe"):
+        return None
+    r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-count_packets", "-show_entries",
+                        "stream=nb_read_packets", "-of", "csv=p=0", str(video)], capture_output=True, text=True)
+    try:
+        return int(r.stdout.strip())
+    except ValueError:
+        return None
+
+
+def gate_frame_count(out: Path, n_frames: int, audio):
+    """E8.3: the output holds exactly the frames rendered (no duplicated or missing frame at a
+    worker boundary). With --audio, -shortest may end the video early: say so, as before."""
+    got = count_frames(out)
+    if got is None or got == n_frames:
+        return
+    if audio and got < n_frames:
+        log(f"WARN {out.name}: {got} of {n_frames} frames: --audio is shorter than the video (-shortest)")
+        return
+    sys.exit(f"frame count gate: {out} has {got} frames, expected {n_frames}")
+
+
 async def full_render(pw, a, html, fmt, M, D, fps, scale, out, errors):
     """Render [start, D) in parallel segments and concatenate. Returns the frame count."""
     W, H = int(M["width"]), int(M["height"])
@@ -719,22 +755,18 @@ async def full_render(pw, a, html, fmt, M, D, fps, scale, out, errors):
         errors.extend(errs)
         if rc != 0:
             raise RuntimeError(f"ffmpeg failed on segment {wi} ({rc})")
+        got = count_frames(seg)
+        if got is not None and got != hi - lo:  # E8.3 frame-count gate
+            raise RuntimeError(f"segment {wi} has {got} frames, expected {hi - lo} (frames {lo}-{hi - 1})")
         return seg
 
     vlog(f"rendering {n_frames} frames x {sub} samples with {workers} worker(s)")
     segs = await asyncio.gather(*(work(i) for i in range(workers)))
     lst = segdir / "list.txt"
     lst.write_text("".join(f"file '{s.resolve()}'\n" for s in segs))
-    cat = ["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(lst)]
-    if a.audio:
-        cat += ["-i", str(a.audio), "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest"]
-        if not a.no_loudnorm:
-            cat += ["-af", "loudnorm=I=-14:TP=-1.5:LRA=11"]
-    else:
-        cat += ["-c", "copy"]
-    cat += ["-movflags", "+faststart", str(out)]
-    subprocess.run(cat, check=True)
+    subprocess.run(mux_cmd(["-f", "concat", "-safe", "0", "-i", str(lst)], a, out), check=True)
     shutil.rmtree(segdir, ignore_errors=True)
+    gate_frame_count(out, n_frames, a.audio)
     log(f"done -> {out}  ({out.stat().st_size / 1e6:.1f} MB, {time.time() - t_start:.0f}s)")
     return n_frames
 
@@ -846,8 +878,9 @@ def build_parser():
     ap.add_argument("--scale", type=float, default=1.0, help="device scale factor (2 = supersample, downscaled on encode)")
     ap.add_argument("--audio", type=Path, help="mux this track (loudness-normalised to -14 LUFS); for SFX use mix.py")
     ap.add_argument("--no-loudnorm", action="store_true", help="mux --audio as-is")
-    ap.add_argument("--workers", type=int, default=max(1, min(4, (os.cpu_count() or 2) // 2)),
-                    help="parallel headless browsers (segments are concatenated)")
+    ap.add_argument("--workers", type=int, default=max(1, min(6, os.cpu_count() or 2)),
+                    help="parallel headless browsers, each rendering whole frames [lo, hi) "
+                         "(default: the CPU count, max 6; at most one per second of video)")
     ap.add_argument("--gl", action="store_true", help="enable SwiftShader WebGL (Three.js / shaders) in headless")
     ap.add_argument("--capture", choices=["auto", "cdp", "screenshot"], default="auto",
                     help="frame capture: auto = CDP screenshots, plus the canvas fast path when the page is one "
