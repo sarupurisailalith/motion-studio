@@ -42,7 +42,10 @@ names. Pass `--quiet` to render.py. Keep script output out of replies; quote num
    continue: write the assumption into the brief's `<start>` (e.g. "unattended: storyboard not
    signed off; proceeded with 9x16,1x1") and repeat it in the final reply.
 4. **Build.** Use the scaffolded `P/<slug>.html` (or copy the template for the brief's
-   `<renderer>` **and** `templates/kit.js` plus its add-on kits into `P`; see SKILL.md step 3).
+   `<renderer>` **and** `templates/kit.js` plus its add-on kits into `P`: 2d `composition.html`;
+   gsap `gsap-composition.html`; glsl `glsl-composition.html`; zdog `zdog-composition.html` +
+   `kit-zdog.js`; p5 `p5-composition.html` + `kit-p5.js`; three `three-composition.html`;
+   layered `layered-composition.html` + `kit-layers.js` + its layers' kits).
    gsap / three / zdog / p5 need `python3 $S/vendor.py P <lib>` first; zdog models via
    `catalog.py use P <ids>` (read `references/zdog.md`); p5 rules are in `references/gotchas.md`;
    three and glsl render with `--gl`. If the brief has
