@@ -30,7 +30,9 @@ Fill every field before writing code. Defaults are fine; blanks are not.
                 whole film happens inside the wordmark's period".
 <art direction> Palette as hex with a role for each colour (bg / primary
                 type / accent / secondary). Fonts with weights, tracking,
-                min size. Texture (grain, paper, glass). Composition rules
+                min size. With brand assets: the brand.py swatch the user
+                confirmed, e.g. "Brand confirmed (brand.json): bg #0e0f12,
+                ink #f3f1ec, accent #ff4d1f; display Acme Grotesk 800". Texture (grain, paper, glass). Composition rules
                 (safe margins in px, subject fills frame, negative space).
                 Camera vocabulary.
 <banned>        A concrete list of effects and clichés to avoid.

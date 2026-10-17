@@ -31,6 +31,14 @@ For a weight that was never ingested the browser fakes bold. Don't rely on that.
 
 **Images.** `<img src="assets/images/hero-shot.png">`. Await every image in `window.ready`
 (`img.decode()`). Size boxes from `w/h` so nothing reflows when the image arrives.
+Place them with the kit, which only crops and scales: `K.cover(ctxOrEl, img, box, {fx, fy, zoom,
+radius})` fills a box around a focal point (animate `fy` to scroll a long screenshot);
+`{fit: 'contain'}` never crops (logos); `K.crop(target, img, {x, y, w, h}, box)` shows one region.
+
+**Screens in devices.** CSS-built frames, no images: `const d = K.device('phone', {w, h, theme})`
+once in layout, move `d.el`, then `K.cover(d.screen, img)`. Canvas: `K.drawDevice(ctx, 'browser',
+box, {url}, s => K.cover(ctx, img, s))`. Kinds: `browser` (neutral chrome, URL pill) and
+`phone`. Put only the user's own URL in the pill. See `templates/examples/device-demo.html`.
 
 **SVG.** Use `<img src="assets/svg/logo.svg">` for a static mark, or inline the file's markup
 when you need to animate parts of it (stroke draw, per-path reveals). The file is already
@@ -56,6 +64,24 @@ images, so every seek is exact and repeatable. Use `--clip-fps` equal to the pie
 
 **Docs.** Read brand guides and copy docs for colours, type and wording. Quote copy exactly. Never
 paraphrase claims.
+
+## Brand from local files
+
+`scripts/brand.py PROJECT [--logo ID] [--guide ID] [--role NAME=#hex] [--font display=FAMILY] [--confirm]`
+reads the ingested assets only (no network) and writes `brand.json` (+ `brand.js`,
+`docs/brand_swatch.png`, `docs/brand-guide.txt`):
+- `colors[]`: `{hex, share, sources, neutral, guide?}` ranked by painted area across logo (×3) and
+  screenshots; colours named in the guide (hex, `rgb()`, `RGB r g b`) come first with their exact hex.
+- `fonts{display, ui}`: from ingested font files (heaviest or "Display"-named family = display), else
+  names from the guide marked `supplied: false` (ingest the file, or the system stack is used).
+- `wordmark`: the logo asset (id, colours, the background it reads best on). `copy`: labelled lines
+  (tagline, headline, CTA…) from the guide; quote them exactly. `roles`: suggested bg / ink / accent
+  plus the user's `--role` choices; `confirmed` once the user approves.
+- PDF guides need `pypdf` or `pdftotext`; without either brand.py says so and uses the images only.
+
+**Brand confirmation (before building):** show `docs/brand_swatch.png` (palette chips and two font
+samples), ask "use these?", apply overrides with `--role`/`--font … --confirm`, and copy the result
+into the brief's `<art direction>`.
 
 ## Rules
 

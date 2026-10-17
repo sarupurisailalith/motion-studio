@@ -19,22 +19,27 @@ names. Pass `--quiet` to render.py. Keep script output out of replies; quote num
    `references/brief-template.md` and the closest playbook in `references/genres.md`, save
    `P/brief.md`, and ask in one batch only for what the user alone can supply (real assets,
    exact copy or numbers, the song, platform). Default the rest and state it.
-   Asset paths or chat attachments → `python3 $S/ingest.py P <paths…>` first (`--attached`
-   for uploads), and use the asset ids in the brief. Never invent assets or claims; flag
-   domain-standard defaults (e.g. a recipe ratio) as `[[DEFAULT: confirm or replace]]`.
+   New piece: create the folder with `python3 $S/scaffold.py <slug> --template 2d|three|gsap|glsl
+   --formats F --duration D` (template, kit.js, brief skeleton; never overwrites), then fill
+   `P/brief.md`. Asset paths or chat attachments → `python3 $S/ingest.py P <paths…>` first
+   (`--attached` for uploads), and use the asset ids in the brief. Never invent assets or claims;
+   flag domain-standard defaults (e.g. a recipe ratio) as `[[DEFAULT: confirm or replace]]`.
+   **Brand check** (logo, screenshots, fonts or a brand guide supplied): `python3 $S/brand.py P`,
+   show `P/docs/brand_swatch.png` (palette + two font samples) in the same batch of questions,
+   apply any overrides with `brand.py P --role NAME=#hex --font display="…" --confirm`, and write
+   the confirmed palette and fonts into the brief's `<art direction>`. Unattended: use the
+   suggestion and state it.
    A reference video or stills (local files only; never download one) →
    `python3 $S/reference.py <ref> P`, look at `P/docs/reference/<name>/sheet.png` and
    `shots.png`, and fill `references/style_guide.md` into `P/style_guide.md` before step 3.
-2. **Dependencies**, once: `python3 $S/render.py --help` and `ffmpeg -version`. On failure,
-   print and stop: `pip install playwright numpy pillow`,
-   `python3 -m playwright install chromium`, ffmpeg (`brew install ffmpeg` /
-   `apt install ffmpeg` / `winget install ffmpeg`).
+2. **Dependencies**, once: `python3 $S/doctor.py`. If it exits 1, show its install lines and stop
+   (it never installs anything itself).
 3. **Sign-off gate.** Show the storyboard table and the format list (`F`, e.g. `9x16,1x1`,
    from `<formats>`). If the user is present, stop and wait for approval. In unattended runs,
    continue: write the assumption into the brief's `<start>` (e.g. "unattended: storyboard not
    signed off; proceeded with 9x16,1x1") and repeat it in the final reply.
-4. **Build.** Copy `templates/composition.html` (or `three-composition.html`) **and**
-   `templates/kit.js` into `P`. If a track was supplied, run
+4. **Build.** Use the scaffolded `P/<slug>.html` (or copy a template **and** `templates/kit.js`
+   into `P`); `gsap`/`three` need `python3 $S/vendor.py P gsap|three` first. If a track was supplied, run
    `python3 $S/beats.py --track <song> --duration D --out P` before timing any scene, and
    include `beats.js` before the kit script. Lay out per format with `K.pick`, keep
    `[data-safe]` text inside `K.safe.ui`, put the brief's hits in `MOTION.hits`.

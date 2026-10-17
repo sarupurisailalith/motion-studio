@@ -27,6 +27,8 @@ Engineering gotchas:
 - **Fractional mask edges:** an `overflow:hidden` mask at a fractional pixel position under a scaled camera can keep a 1 px row of stale glyph pixels after some seek orders. Round mask positions to whole pixels.
 - **Three.js preview from `file://`:** ES modules are blocked there, so the page stays black. Serve the folder (`python3 -m http.server`) to preview; render.py already serves it over http.
 - **Sub-pixel CSS `scale()` on small elements:** rounded, bordered or anti-aliased boxes scaled by a non-integer factor can rasterise differently on a second seek, which fails the determinism gate. Animate `width`/`height` (or draw to canvas) and keep positions on whole pixels.
+- **GSAP:** a `tl.set(…, 0)` is reverted when the playhead returns to 0, so frame 0 differs between seeks. Set initial state with `gsap.set()` before building the timeline, use `fromTo` (not `from`), keep every tween inside the one paused timeline, and `gsap.config({force3D: false})`.
+- **GLSL:** create the context with `preserveDrawingBuffer: true` or screenshots read a cleared buffer; loop with `phase = 2π·uTime/uDuration` (a circle in noise space), never with feedback buffers; render with `--gl`.
 - **Readability:** keep things readable on screen for at least 8 clean frames. A glitch lasts only 1–2 frames and only on a real cut.
 - **Honesty:** never invent features, numbers, fake customers, reviews or results. Label generated imagery as a concept. Check music and SFX licences. Never write API keys into files.
 - **Slop:** "a video with no bugs is not the same as a good video"; "frame one is a finished picture, never a word halfway through flying in"; and "if the hero object isn't the most memorable thing, start over."

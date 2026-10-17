@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Motion Composition — GSAP</title>
+<!--
+  MOTION STUDIO — deterministic GSAP template: ONE paused master timeline, seeked per frame.
+  Copy this file AND kit.js (the shared motion kit, window.K) into the project folder, then
+  vendor GSAP (downloaded per project, never committed):  python3 scripts/vendor.py <folder> gsap
+
+  Same contract as composition.html: window.MOTION, window.ready, window.seek(t).
+  GSAP RULES
+    - Every tween lives in the master timeline `tl` (paused). A tween outside it plays on GSAP's
+      real-time ticker and breaks determinism. No gsap.to() at top level, no delayedCall,
+      no repeat: -1 (write the repeats out, or wrap time with K.wrap), no onUpdate side effects.
+    - seek(t) = tl.seek(t, false): GSAP renders the exact state for t, in any order.
+    - Use fromTo (explicit start values), not from(): from() reads the DOM when it is created.
+    - Initial state: gsap.set() before building tl, never tl.set(..., 0) (reverted at t = 0).
+    - force3D:false keeps transforms 2D (no compositor layers that rasterise differently per seek).
+    - Animate width/height for shapes instead of a fractional scale on small bordered boxes.
+  Preview: open the file in a browser — Space pauses, ←/→ step frames, F cycles formats,
+  G shows the safe areas, ?t=3.25 freezes that moment, ?loop=0 stops looping.
+-->
+<style>
+  :root{
+    --bg:#101114; --ink:#f3f1ec; --accent:#ff4d1f; --muted:#7d7a73;
+    /* System stack on purpose: no font ships with the plugin. For brand type, ingest the font
+       (ingest.py → assets/fonts.css) and put its family first. */
+    --font-display: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  html,body{margin:0;height:100%;background:#000;overflow:hidden}
+  #stage{position:absolute;left:0;top:0;transform-origin:0 0;overflow:hidden;background:var(--bg)}
+  #stage *{box-sizing:border-box}
+  .abs{position:absolute;left:0;top:0}
+  /* --- scene styles below --- */
+  #bar{border-radius:999px;background:var(--accent)}
+  .mask{overflow:hidden;position:absolute}
+  .word{font-family:var(--font-display);font-weight:800;color:var(--ink);line-height:1;white-space:nowrap;text-align:center}
+  #preview-ui{position:fixed;left:0;right:0;bottom:0;height:28px;display:flex;gap:8px;align-items:center;
+      padding:0 10px;background:rgba(0,0,0,.6);color:#fff;font:12px ui-monospace,monospace;z-index:9}
+  #preview-ui input{flex:1}
+  #safe-overlay{position:absolute;left:0;top:0;pointer-events:none;display:none;z-index:8}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bar" class="abs"></div>
+  <!-- data-safe on the mask (sized to the word); data-text on the glyph row (opacity 0 while masked) -->
+  <div id="title" class="mask" data-safe><div class="word" id="titleWord" data-text></div></div>
+</div>
+
+<script src="vendor/gsap.min.js"></script>
+<!-- Cutting to music? Run beats.py, then load beats.js on the line ABOVE the kit script. -->
+<script src="kit.js"></script>
+<script>
+const K = window.K;
+if (!window.gsap) throw new Error('GSAP missing: run python3 scripts/vendor.py <this folder> gsap');
+
+/* =========================================================================
+   COMPOSITION SETTINGS
+   ========================================================================= */
+window.MOTION = {
+  width: 1080, height: 1080, fps: 60, duration: 6, loop: true,
+  hits: [[0.4, 'bar', 'swoosh'], [1.0, 'title-in', 'tick'], [4.0, 'bar-out', null]],
+};
+K.init(window.MOTION);
+const { width: W, height: H } = window.MOTION;
+gsap.config({ force3D: false });
+
+/* =========================================================================
+   SCENE — replace with the real piece. Demo: a dot stretches into a bar, a word rises
+   through a mask glyph by glyph (K.glyphs + a GSAP stagger), both return to frame 0 at D.
+   ========================================================================= */
+const $ = id => document.getElementById(id);
+const stage = $('stage'), bar = $('bar'), title = $('title'), titleWord = $('titleWord');
+const L = K.pick({ default: { font: 170, barW: 640 }, '9x16': { font: 180, barW: 760 }, '4x5': { font: 170, barW: 680 } });
+const S = K.safe.ui, cx = S.x + S.w / 2, cy = S.y + S.h / 2;
+const DOT = 200, BAR_H = 64, GAP = 56;
+let tl;   // the ONE master timeline, built in window.ready after fonts and layout
+
+function layout() {
+  const spans = K.glyphs(titleWord, 'GSAP', { tracking: -40 });
+  titleWord.style.fontSize = L.font + 'px';
+  const ww = Math.ceil(spans.at(-1).offsetLeft + spans.at(-1).offsetWidth - spans[0].offsetLeft + L.font * 0.3);
+  const top = Math.round(cy - (L.font + GAP + DOT) / 2);   // whole px mask edge
+  title.style.cssText = `left:${Math.round(cx - ww / 2)}px;top:${top}px;width:${ww}px;height:${Math.round(L.font * 1.1)}px`;
+  titleWord.style.width = ww + 'px';
+  const barY = top + L.font + GAP + DOT / 2;
+  return { spans, barY, travel: Math.round(L.font * 1.3) };
+}
+
+function build({ spans, barY, travel }) {
+  const D = window.MOTION.duration;
+  tl = gsap.timeline({ paused: true, defaults: { ease: 'power3.inOut' } });
+  // dot <-> bar: width/height/left keyed together (frame 0 and D are the same dot)
+  const dot = { width: DOT, height: DOT, left: cx - DOT / 2, top: barY - DOT / 2 };
+  const pill = { width: L.barW, height: BAR_H, left: cx - L.barW / 2, top: barY - BAR_H / 2 };
+  // Initial state with gsap.set BEFORE the timeline (a tl.set at time 0 is reverted when the
+  // playhead returns to 0, so frame 0 would differ between seeks).
+  gsap.set(bar, dot);
+  gsap.set(titleWord, { opacity: 0 });
+  tl.to(bar, { ...pill, duration: 0.8, ease: 'expo.inOut' }, 0.4)
+    .to(bar, { ...dot, duration: 0.8, ease: 'expo.inOut' }, 4.0);
+  // title: glyphs rise through the mask (editorial ease), leave upward faster
+  tl.set(titleWord, { opacity: 1 }, 1.0)
+    .fromTo(spans, { y: travel }, { y: 0, duration: 0.7, ease: 'expo.out', stagger: 0.06 }, 1.0)
+    .to(spans, { y: -travel, duration: 0.45, ease: 'power3.in', stagger: 0.04 }, 3.6)
+    .set(titleWord, { opacity: 0 }, 3.6 + 0.45 + 0.04 * (spans.length - 1));
+  tl.set({}, {}, D);   // pin the timeline length to D (seek(D) == seek(0) for the loop seam)
+}
+
+/* =========================================================================
+   RUNTIME (shared — normally no edits needed below)
+   ========================================================================= */
+stage.style.width = W + 'px'; stage.style.height = H + 'px';
+const params = new URLSearchParams(location.search);
+const RENDER_MODE = params.has('render');
+
+window.ready = (async () => {
+  if (document.fonts && document.fonts.ready) await document.fonts.ready;
+  await Promise.all([...document.images].map(img => img.decode ? img.decode().catch(() => {}) : null));
+  build(layout());
+})();
+window.seek = async (t) => { await window.ready; tl.seek(t, false); };
+
+function fit() {
+  if (RENDER_MODE) { stage.style.transform = 'none'; return; }
+  const s = Math.min(innerWidth / W, (innerHeight - 28) / H);
+  stage.style.transform = `translate(${(innerWidth - W * s) / 2}px,${(innerHeight - 28 - H * s) / 2}px) scale(${s})`;
+}
+addEventListener('resize', fit); fit();
+
+if (!RENDER_MODE) {
+  // Preview player (never used by the renderer)
+  const ui = document.createElement('div'); ui.id = 'preview-ui';
+  ui.innerHTML = `<button id="pp">❚❚</button><input id="sc" type="range" min="0" step="0.001"><span id="tc"></span><span id="fmt">${K.FORMAT.name} ${W}×${H} · F format · G safe</span>`;
+  document.body.appendChild(ui);
+  const D = window.MOTION.duration, fps = window.MOTION.fps, sc = ui.querySelector('#sc'), tc = ui.querySelector('#tc');
+  sc.max = D;
+  let playing = !params.has('t'), t0 = performance.now(), base = parseFloat(params.get('t') || 0);
+  const loop = params.get('loop') !== '0' && window.MOTION.loop !== false;
+  const show = t => { window.seek(t); sc.value = t; tc.textContent = t.toFixed(3) + 's / f' + Math.round(t * fps); };
+  const tick = () => {
+    if (playing) { let t = base + (performance.now() - t0) / 1000; t = loop ? K.wrap(t, D) : Math.min(t, D); show(t); }
+    requestAnimationFrame(tick);
+  };
+  const setPlay = p => { playing = p; base = +sc.value; t0 = performance.now(); ui.querySelector('#pp').textContent = p ? '❚❚' : '▶'; };
+  ui.querySelector('#pp').onclick = () => setPlay(!playing);
+  sc.oninput = () => { setPlay(false); show(+sc.value); };
+  addEventListener('keydown', e => {
+    if (e.code === 'Space') setPlay(!playing);
+    if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') { setPlay(false); show(K.clamp(+sc.value + (e.code === 'ArrowRight' ? 1 : -1) / fps, 0, D)); }
+  });
+  const NS = 'http://www.w3.org/2000/svg', ov = document.createElementNS(NS, 'svg');
+  ov.id = 'safe-overlay'; ov.setAttribute('width', W); ov.setAttribute('height', H); ov.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  [['title', '#00a3ff', '14 10'], ['ui', '#ff2bd6', '']].forEach(([name, color, dash]) => {
+    const r = K.safe[name], el = document.createElementNS(NS, 'rect');
+    Object.entries({ x: r.x, y: r.y, width: r.w, height: r.h, fill: 'none', stroke: color, 'stroke-width': 3, 'stroke-dasharray': dash })
+      .forEach(([k, v]) => el.setAttribute(k, v));
+    ov.append(el);
+  });
+  stage.appendChild(ov);
+  addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === 'g' || e.key === 'G') ov.style.display = ov.style.display === 'block' ? 'none' : 'block';
+    if (e.key === 'f' || e.key === 'F') location.search = K.formatSearch(K.nextFormat());
+  });
+  window.ready.then(() => { show(base); tick(); });
+}
+</script>
+</body>
+</html>
