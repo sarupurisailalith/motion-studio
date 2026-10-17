@@ -20,10 +20,11 @@ K.footage();
 window.MOTION = K.init({ width: 640, height: 360, fps: 30, duration: C.duration, loop: false });
 window.FOOTAGE = true;
 const stage = document.getElementById('stage');
-const make = { keyword: K.keywordPop, stat: K.statCard, quote: K.pullQuote, 'lower-third': K.lowerThird };
+const make = { keyword: K.keywordPop, stat: K.statCard, quote: K.pullQuote, 'lower-third': K.lowerThird,
+               cta: K.ctaCard, screenshot: K.deviceShot };
 const parts = C.cues.map(c => make[c.kind](stage, Object.assign({ size: 40 }, c)));
 if (C.captions) K.captions(stage, { size: 22 });
-window.ready = Promise.resolve();
+window.ready = Promise.all([...document.images].map(i => i.decode()));
 window.seek = async t => { K.footageUpdate(t - (C.late || 0)); };
 </script>
 </body>

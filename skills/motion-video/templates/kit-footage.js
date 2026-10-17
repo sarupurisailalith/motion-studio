@@ -26,7 +26,7 @@
      K.featureList(parent, {title, items:[{text, at, claim}], at, until})
      K.pullQuote(parent, {from, to, at, until})
      K.ctaCard(parent, {line, url, at, claim})
-     K.deviceShot(parent, {src, w, h, at, until, device})   minimal frame; E3.4 has the real one
+     K.deviceShot(parent, {src, w, h, at, until, device})   K.device frame ('phone' | 'browser') + K.cover
    SPEAKER
      K.speakerRect(layout)   'full' | 'corner' | 'split' | 'shape' | 'pig' -> {x, y, w, h, r}
      K.graphicsArea(rect)    the free part of K.safe.ui next to the speaker (pass as {area})
@@ -136,6 +136,11 @@
   const px = v => Math.round(v) + 'px';
   const unit = () => Math.min(K.FORMAT.W, K.FORMAT.H) / 1080;   // 1 at 1080 short side
   const font = 'var(--font-display, system-ui, sans-serif)';
+  // Text always sits on its own opaque plate (contrast gate: >= 4.5:1 whatever plays behind it,
+  // e.g. the speaker clip or a layout morph). Accent-coloured words only on the dark plate:
+  // a saturated accent on the light plate is usually under 3:1.
+  const DARK = 'rgba(12,12,14,.9)', LIGHT = 'var(--bg, #f3f1ec)';
+  const plate = (u, bg) => ({ background: bg, padding: `${px(14 * u)} ${px(28 * u)}`, borderRadius: px(18 * u) });
   // in/out envelope: rises over `inD` from t0, falls over `outD` ending at t1. 0..1
   // The rise starts one frame early so the cue's own frame already shows it (cue_timing: 0 frames).
   function env(t, t0, t1, inD = 0.18, outD = 0.2) {
@@ -250,7 +255,7 @@
     b.el.dataset.claim = claimOf(o.text, o.at, o.claim);
     css(b.el, { position: 'absolute', left: px(o.x ?? S.x + S.w / 2), top: px(o.y ?? S.y + S.h * 0.3),
                 font: `900 ${px((o.size || 110) * u)}/1 ${font}`, color: o.color || 'var(--accent, #ff4d1f)',
-                letterSpacing: '-0.04em', whiteSpace: 'nowrap', maxWidth: px(S.w) });
+                letterSpacing: '-0.04em', whiteSpace: 'nowrap', maxWidth: px(S.w), ...plate(u, o.plate || DARK) });
     return register({ el: b.el, t0, t1, update: t => b.update(t) });
   }
   function statCard(parent, o) {
@@ -262,7 +267,8 @@
     const v = mk(b.el, 'div', null, String(o.value)), l = mk(b.el, 'div', null, o.label || '');
     const claim = claimOf(`${o.value} ${o.label || ''}`.trim(), o.at, o.claim);
     [v, l].forEach(el => { el.dataset.text = ''; el.dataset.claim = claim; });
-    css(v, { font: `900 ${px(150 * u)}/1 ${font}`, color: 'var(--accent, #ff4d1f)', letterSpacing: '-0.05em' });
+    css(v, { font: `900 ${px(150 * u)}/1 ${font}`, letterSpacing: '-0.05em',
+             borderBottom: `${px(10 * u)} solid var(--accent, #ff4d1f)`, paddingBottom: px(6 * u) });
     css(l, { font: `600 ${px(36 * u)}/1.2 ${font}`, marginTop: px(8 * u) });
     return register({ el: b.el, t0, t1, update: t => b.update(t) });
   }
@@ -271,7 +277,7 @@
     const box = mk(parent, 'div', 'k-features');
     box.dataset.safe = '';
     css(box, { position: 'absolute', left: px(o.x ?? S.x + S.w * 0.06), top: px(o.y ?? S.y + S.h * 0.12),
-               maxWidth: px(S.w * 0.88),
+               maxWidth: px(S.w * 0.88), ...plate(u, LIGHT),
                color: 'var(--ink, #111)', font: `700 ${px(52 * u)}/1.25 ${font}` });
     const head = o.title ? mk(box, 'div', null, o.title) : null;
     if (head) { head.dataset.text = ''; head.dataset.claim = o.titleClaim || 'label'; css(head, { opacity: 0.6, fontSize: px(36 * u), marginBottom: px(10 * u) }); }
@@ -303,7 +309,8 @@
     el.dataset.claim = a === b ? o.from : `${o.from}-${o.to}`;
     markCue(el, o.at || o.from);
     css(el, { position: 'absolute', left: px(S.x + S.w * 0.06), top: px(S.y + S.h * 0.2), width: px(S.w * 0.88),
-              font: `800 ${px((o.size || 72) * u)}/1.12 ${font}`, color: 'var(--ink, #111)', letterSpacing: '-0.02em' });
+              font: `800 ${px((o.size || 72) * u)}/1.12 ${font}`, color: 'var(--ink, #111)', letterSpacing: '-0.02em',
+              ...plate(u, LIGHT) });
     return register({ el, t0, t1, update(t) {
       setVis(el, env(t, t0, t1, 0.2, 0.25));
       el.style.transform = `translateY(${((1 - springIn(t, t0)) * 30 * u).toFixed(2)}px)`;
@@ -315,35 +322,40 @@
     card.dataset.safe = '';
     markCue(card, o.at);
     css(card, { position: 'absolute', left: px(S.x + S.w / 2), top: px(S.y + S.h / 2), textAlign: 'center',
-                color: 'var(--ink, #111)', width: px(S.w * 0.9) });
+                color: 'var(--ink, #111)', width: px(S.w * 0.9), ...plate(u, LIGHT) });
     const line = o.line ? mk(card, 'div', null, o.line) : null;
     const url = mk(card, 'div', null, o.url);
     if (line) { line.dataset.text = ''; line.dataset.claim = o.lineClaim || claimOf(o.line, o.at, o.claim); css(line, { font: `800 ${px(72 * u)}/1.1 ${font}` }); }
     url.dataset.text = ''; url.dataset.claim = o.claim || 'label';
-    css(url, { font: `700 ${px(46 * u)}/1.2 ${font}`, color: 'var(--accent, #ff4d1f)', marginTop: px(18 * u) });
+    css(url, { font: `700 ${px(46 * u)}/1.2 ${font}`, marginTop: px(18 * u), textDecoration: 'underline',
+               textDecorationColor: 'var(--accent, #ff4d1f)', textDecorationThickness: px(6 * u), textUnderlineOffset: px(8 * u) });
     return register({ el: card, t0, t1, update(t) {
       setVis(card, env(t, t0, t1, 0.25));
       card.style.transform = `translate(-50%,-50%) scale(${(0.9 + 0.1 * springIn(t, t0)).toFixed(4)})`;
     } });
   }
-  // Minimal device frame: a rounded bezel around a supplied screenshot (never a drawn UI).
-  // E3.4 brings the real device frames to kit.js; prefer those when present.
+  // A supplied screenshot in a device frame (kit.js E3.4: K.device + K.cover; never a drawn UI).
+  // device: 'phone' (default) or 'browser' ('laptop' is accepted as browser).
   function deviceShot(parent, o) {
     const S = o.area || K.safe.ui, u = unit(), [t0, t1] = window_(o.at, o.until, 3);
-    const phone = (o.device || 'phone') === 'phone';
-    const h = Math.min(S.h * (phone ? 0.78 : 0.6), phone ? S.w * 1.9 : S.w * 0.55);
-    const w = phone ? h * (o.w && o.h ? o.w / o.h : 9 / 19.5) : h * (o.w && o.h ? o.w / o.h : 16 / 10);
-    const frame = mk(parent, 'div', 'k-device');
-    markCue(frame, o.at);
-    css(frame, { position: 'absolute', left: px(o.x ?? S.x + S.w / 2), top: px(o.y ?? S.y + S.h / 2), width: px(w), height: px(h),
-                 padding: px((phone ? 14 : 18) * u), borderRadius: px((phone ? 56 : 22) * u), background: '#0b0b0d',
-                 boxShadow: `0 ${px(30 * u)} ${px(80 * u)} rgba(0,0,0,.35)` });
-    const img = mk(frame, 'img');
+    const kind = (o.device || 'phone') === 'phone' ? 'phone' : 'browser';
+    const ar = o.w && o.h ? o.w / o.h : kind === 'phone' ? 9 / 19.5 : 16 / 10;
+    let h = S.h * (kind === 'phone' ? 0.78 : 0.6), w = kind === 'phone' ? h * ar : h * ar;
+    if (w > S.w * 0.9) { w = S.w * 0.9; h = w / ar; }
+    const dev = K.device(kind, { w: Math.round(w), h: Math.round(h), shadow: true, url: o.url });
+    const wrap = mk(parent, 'div', 'k-device-shot');
+    markCue(wrap, o.at);
+    css(wrap, { position: 'absolute', left: px(o.x ?? S.x + S.w / 2), top: px(o.y ?? S.y + S.h / 2),
+                width: px(Math.round(w)), height: px(Math.round(h)) });
+    css(dev.el, { left: '0px', top: '0px' });
+    wrap.appendChild(dev.el);
+    const img = mk(dev.screen, 'img');   // inside the document, so window.ready decodes it
     img.src = o.src;
-    css(img, { width: '100%', height: '100%', objectFit: 'cover', borderRadius: px((phone ? 42 : 8) * u), display: 'block' });
-    return register({ el: frame, img, t0, t1, update(t) {
-      setVis(frame, env(t, t0, t1, 0.2, 0.25));
-      frame.style.transform = `translate(-50%,-50%) translateY(${((1 - springIn(t, t0)) * 60 * u).toFixed(2)}px)`;
+    let placed = false;
+    return register({ el: wrap, img, dev, t0, t1, update(t) {
+      if (!placed && img.naturalWidth) { K.cover(dev.screen, img, null, { fx: o.fx ?? 0.5, fy: o.fy ?? 0 }); placed = true; }
+      setVis(wrap, env(t, t0, t1, 0.2, 0.25));
+      wrap.style.transform = `translate(-50%,-50%) translateY(${((1 - springIn(t, t0)) * 60 * u).toFixed(2)}px)`;
     } });
   }
 

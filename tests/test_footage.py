@@ -383,6 +383,7 @@ class FootageGates(unittest.TestCase):
         g = self.gates(gate_fixture({"duration": 4.5, "cues": self.CUES, "captions": True}))
         self.assertTrue(g["cue_timing"].startswith("pass (3 cues, worst 0.0 frames)"), g)
         self.assertTrue(g["claim_trace"].startswith("pass"), g)
+        self.assertTrue(g["contrast"].startswith("pass"), g)      # every component sits on a plate
         self.assertEqual(g["page_errors"], "none")
 
     def test_cue_timing_fail_when_late(self):
@@ -517,6 +518,20 @@ class KitFootage(Page):
         self.assertAlmostEqual(page.evaluate("K.cue('w4+0.25')"), 1.35, places=6)
         self.assertIn("was cut", page.evaluate("() => { try { K.wordT('w2'); } catch (e) { return e.message; } }"))
         self.assertEqual(page.evaluate("[K.punch(0.5), K.punch(1.5, 1.1)]"), [1, 1.1])
+        self.assertEqual(errors, [])
+
+    def test_device_shot_uses_kit_device_frame(self):
+        """deviceShot wraps kit.js K.device (E3.4) and covers the screen with the supplied image."""
+        from PIL import Image
+        html = gate_fixture({"duration": 4.5, "cues": [
+            {"kind": "screenshot", "src": "shot.png", "w": 90, "h": 195, "at": "w1", "until": "w5"}]})
+        Image.new("RGB", (90, 195), (20, 120, 220)).save(html.parent / "shot.png")
+        page, errors = self.open(html)
+        page.evaluate("window.seek(1.5)")
+        got = page.evaluate("""() => { const w = document.querySelector('.k-device-shot');
+          const s = w.querySelector('.k-device-phone .k-device-screen img');
+          return { cue: w.dataset.cue, img: !!s && s.naturalWidth, vis: getComputedStyle(w).visibility }; }""")
+        self.assertEqual(got, {"cue": "w1", "img": 90, "vis": "visible"})
         self.assertEqual(errors, [])
 
     def test_caption_groups(self):
