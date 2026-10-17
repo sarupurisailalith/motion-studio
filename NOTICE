@@ -10,3 +10,13 @@ If you redistribute Motion Studio, or a work derived from it (including a
 modified version, a fork, or a product or service that builds on it), keep
 this NOTICE file and include the attribution above wherever your work shows
 its third-party notices, as required by Section 4(d) of the Apache License.
+
+Third-party libraries are not included in this repository. When you run
+skills/motion-video/scripts/vendor.py, it downloads exact pinned, unmodified
+builds from the npm registry into your own project's vendor/ folder, each with
+its licence under vendor/LICENSES/<package>/:
+  three (MIT), gsap (GSAP standard no-charge licence), lottie-web (MIT),
+  zdog (MIT, Metafizzy), zfont (MIT, James Daniel; bundles typr.js, MIT),
+  p5 (LGPL-2.1, the Processing Foundation and contributors).
+p5.js is used only as that separate, unmodified file; Motion Studio never
+bundles, inlines or modifies it.

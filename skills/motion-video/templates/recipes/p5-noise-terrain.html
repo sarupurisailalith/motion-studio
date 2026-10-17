@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Recipe — noise terrain (p5)</title>
+<!--
+  RECIPE · generative loop: stacked ridge lines over loop-periodic noise (a background plate or a
+  hero loop). Needs vendor/p5.min.js (vendor.py P p5), kit.js, kit-p5.js next to it.
+  Technique: each ridge is a fresh function of t (no state across frames); the noise walks a
+  circle (K.loopNoise), so frame D == frame 0; nearer ridges are drawn later and occlude.
+  Knobs: ROWS, AMP, the palette. Render: render.py <this> --check-only, then --sheet.
+-->
+<style>html,body{margin:0;background:#000;overflow:hidden}#stage{position:absolute;left:0;top:0;overflow:hidden}</style>
+</head>
+<body>
+<div id="stage"></div>
+<script src="vendor/p5.min.js"></script>
+<script src="kit.js"></script>
+<script src="kit-p5.js"></script>
+<script>
+const K = window.K;
+window.MOTION = K.init({ width: 1080, height: 1080, fps: 30, duration: 8, loop: true });
+const { W, H } = K.FORMAT, D = window.MOTION.duration;
+document.getElementById('stage').style.cssText += `;width:${W}px;height:${H}px`;
+const ROWS = K.pick({ '9x16': 46, default: 34 }), AMP = 0.16 * H;
+const PAL = { bg: '#0E0F13', line: '#F3EFE6', glow: '#FF5A3C' };
+
+const sk = K.sketch({
+  parent: document.getElementById('stage'), seed: 5,
+  draw: (p, t) => {
+    p.background(PAL.bg);
+    const n = K.loopNoise(t, D, 0.9);
+    const top = 0.22 * H, bottom = 0.92 * H;
+    for (let r = 0; r < ROWS; r++) {
+      const v = r / (ROWS - 1), y0 = K.lerp(top, bottom, v);
+      const near = v * v;                                    // nearer rows rise more
+      p.fill(PAL.bg); p.stroke(p.lerpColor(p.color(PAL.line), p.color(PAL.glow), 0.15 + 0.6 * K.rand(9, r)));
+      p.strokeWeight(1.2 + 1.6 * v);
+      p.beginShape();
+      p.vertex(-10, H + 10);
+      for (let x = -10; x <= W + 10; x += 8) {
+        const c = Math.max(0, 1 - Math.pow(Math.abs(x / W - 0.5) * 2, 2));   // peaks gather in the centre (≥ 0: pow of a negative is NaN)
+        const h = p.noise(x * 0.004 + n.x, r * 0.22 + n.y, 0.3) * c;
+        p.vertex(x, y0 - AMP * (0.25 + near) * Math.pow(h, 1.6) * 2);
+      }
+      p.vertex(W + 10, H + 10);
+      p.endShape(p.CLOSE);
+    }
+  },
+});
+window.ready = sk.ready;
+window.seek = t => sk.seek(t);
+if (!new URLSearchParams(location.search).has('render')) {
+  sk.ready.then(() => { const t0 = performance.now(); const tick = async () => { await window.seek(K.wrap((performance.now() - t0) / 1000, D)); requestAnimationFrame(tick); }; tick(); });
+}
+</script>
+</body>
+</html>

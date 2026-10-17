@@ -78,11 +78,38 @@ def serve(directory: Path) -> str:
         class Quiet(http.server.SimpleHTTPRequestHandler):
             def log_message(self, *a):
                 pass
+
+            def handle(self):
+                try:
+                    super().handle()
+                except (BrokenPipeError, ConnectionResetError):
+                    pass   # the page cancelled the request (e.g. p5 loadFont's first fetch)
         handler = functools.partial(Quiet, directory=str(directory))
         srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         _SERVERS[directory] = f"http://127.0.0.1:{srv.server_address[1]}/"
     return _SERVERS[directory]
+
+
+def watch_requests(page, errors):
+    """E10.8: report a failed request as a page error unless the same URL also loads (status
+    < 400). p5's loadFont fetches twice and cancels the first; that cancel is not an error.
+    A URL that only ever fails is still reported."""
+    loaded = set()
+
+    def failed(r):
+        if r.url not in loaded:
+            errors.append(f"requestfailed: {r.url}")
+
+    async def finished(r):
+        resp = await r.response()
+        if resp and resp.status < 400:
+            loaded.add(r.url)
+            while f"requestfailed: {r.url}" in errors:
+                errors.remove(f"requestfailed: {r.url}")
+
+    page.on("requestfailed", failed)
+    page.on("requestfinished", finished)
 
 
 async def open_page(pw, html: Path, fmt=None, width=None, height=None, scale=1.0, gl=False):
@@ -100,7 +127,7 @@ async def open_page(pw, html: Path, fmt=None, width=None, height=None, scale=1.0
     errors = []
     page.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
     page.on("console", lambda m: errors.append(f"console.{m.type}: {m.text}") if m.type == "error" else None)
-    page.on("requestfailed", lambda r: errors.append(f"requestfailed: {r.url}"))
+    watch_requests(page, errors)
     url = page_url(html, fmt)
     await page.goto(url, wait_until="load")
     try:

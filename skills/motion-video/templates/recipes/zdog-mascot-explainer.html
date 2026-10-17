@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Recipe — mascot explainer (Zdog)</title>
+<!--
+  RECIPE · illustrated 3D explainer: Pip drops in, turns to us, points at a bar chart that grows
+  bar by bar, and each bar's value label is DOM text pinned to the bar top with K.Z.project
+  (crisp, and the safe_area / text_duration gates see it).
+  Needs vendor/zdog.dist.min.js (vendor.py P zdog), kit.js, kit-zdog.js and
+  models/pip.js + models/chart-bars.js (catalog.py use P pip chart-bars).
+  DATA below is a placeholder: replace it with the brief's real, sourced numbers before shipping.
+  Knobs: DATA, the beat times in pose(), the camera yaw track.
+-->
+<style>
+  html,body{margin:0;background:#000;overflow:hidden}
+  #stage{position:absolute;left:0;top:0;overflow:hidden;background:#F2EFE9}
+  .lbl{position:absolute;left:0;top:0;font:800 40px/1 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+       color:#111;white-space:nowrap;opacity:0}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script src="vendor/zdog.dist.min.js"></script>
+<script src="kit.js"></script>
+<script src="kit-zdog.js"></script>
+<script src="models/pip.js"></script>
+<script src="models/chart-bars.js"></script>
+<script>
+const K = window.K, TAU = Zdog.TAU;
+window.MOTION = K.init({ width: 1080, height: 1080, fps: 30, duration: 8, loop: true,
+  hits: [[0.5, 'pip-lands', 'thud'], [1.9, 'point', 'swoosh'], [2.2, 'bar-1', 'pop'], [2.5, 'bar-2', 'pop'],
+         [2.8, 'bar-3', 'pop'], [3.1, 'bar-4', 'pop']] });
+const { W, H } = K.FORMAT, D = window.MOTION.duration, S = K.safe.ui;
+const stage = document.getElementById('stage');
+stage.style.width = W + 'px'; stage.style.height = H + 'px';
+const ctx = K.Z.canvas(W, H, stage).getContext('2d');
+
+const DATA = [{ v: 0.42, label: '42' }, { v: 0.58, label: '58' }, { v: 0.71, label: '71' }, { v: 0.93, label: '93' }];  // placeholder
+const L = K.pick({ '9x16': { zoom: 6.2, y: 0.62 }, default: { zoom: 6.0, y: 0.66 } });
+const view = { zoom: L.zoom, cx: S.x + S.w / 2, cy: S.y + S.h * L.y };
+
+const scene = new Zdog.Anchor(), cam = K.Z.camera(scene);
+const pip = K.Z.make('pip', cam.world, { translate: { x: -48 } });
+const chart = K.Z.make('chart-bars', cam.world, { translate: { x: 28 }, scale: 1.2, values: DATA.map(() => 1) });
+const shadow = K.Z.shadow(pip.joints.root, () => 0, { bias: K.Z.LAYERS.SHADOW, diameter: 34 });
+const rig = K.Z.rig(pip.joints);
+const tops = chart.anchors.bars.map(b => new Zdog.Anchor({ addTo: b, translate: { y: -60 } }));
+const labels = DATA.map((d, i) => {
+  const el = document.createElement('div');
+  el.className = 'lbl'; el.id = 'bar-' + (i + 1); el.textContent = d.label;
+  el.setAttribute('data-safe', ''); el.setAttribute('data-text', '');
+  stage.appendChild(el); return el;
+});
+const io = K.bezier(.45, 0, .15, 1), out = K.bezier(.16, 1, .3, 1);
+
+function pose(t) {
+  cam.set({ yaw: K.track([[0, -0.35], [2.0, -0.2, io], [6.4, -0.2], [7.6, -0.35, io]], t), pitch: 0.18 });
+  pip.root.rotate.y = K.track([[0, 0.5], [1.0, 0.5], [1.4, -0.35, io], [6.6, -0.35], [7.0, 0.5, io]], t);
+  rig.pose(t, [
+    { clip: 'drop-in', at: 0, len: 0.5 },
+    { clip: 'idle', period: D / 4 },
+    { clip: 'point', at: 1.9, len: 3.6, side: 'R', angle: 1.4 },
+    { clip: 'hop', at: 6.0, h: 16, air: 0.4 },
+  ]);
+  // drop-in starts the loop from the top; the last 0.4 s lifts Pip back up so frame D == frame 0
+  pip.joints.root.translate.y += -220 * K.ease.inCubic(K.seg(t, D - 0.45, D));
+  pip.blink(t, [3.6]);
+  shadow.update();
+  chart.anchors.bars.forEach((b, i) => {
+    const grow = K.springTrack([[0, 0], [2.2 + 0.3 * i, DATA[i].v], [6.6 + 0.1 * i, 0]], t, 16, .85);
+    b.scale.y = Math.max(0.001, grow);
+  });
+}
+
+function render(t) {
+  pose(t);
+  K.Z.render(scene, ctx, view);
+  labels.forEach((el, i) => {
+    const p = K.Z.project(tops[i]);
+    const a = out(K.seg(t, 2.45 + 0.3 * i, 2.85 + 0.3 * i)) * (1 - K.ease.inCubic(K.seg(t, 6.2, 6.5)));
+    el.style.opacity = a > 0.02 ? Math.min(1, a * 1.2) : 0;
+    el.style.transform = `translate(${Math.round(p.x - el.offsetWidth / 2)}px,${Math.round(p.y - 54)}px)`;
+  });
+}
+
+window.ready = (async () => { if (document.fonts) await document.fonts.ready; })();
+window.seek = async t => { await window.ready; render(t); };
+if (!new URLSearchParams(location.search).has('render')) {
+  window.ready.then(() => { const t0 = performance.now(); const tick = () => { window.seek(K.wrap((performance.now() - t0) / 1000, D)); requestAnimationFrame(tick); }; tick(); });
+}
+</script>
+</body>
+</html>

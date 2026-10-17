@@ -1,6 +1,6 @@
 ---
 name: motion-video
-description: Make motion-graphics videos (MP4) by writing the animation as code — HTML/SVG/Canvas/GSAP/Three.js/shaders — then rendering it frame-by-frame deterministically with headless Chromium and ffmpeg. Use for launch/brand films, product or app demos, UI motion loops, kinetic typography, explainers (science, recipe, process, data), timelines, logo intros, 3D hero scenes, shader loops, lyric/music videos and social clips (9:16, 1:1, 4:5, 16:9), with synced sound effects and music. Also use to render/QA an existing HTML animation into a video.
+description: Make motion-graphics videos (MP4) by writing the animation as code — HTML/SVG/Canvas/GSAP/Three.js/Zdog/p5.js/shaders — then rendering it frame-by-frame deterministically with headless Chromium and ffmpeg. Use for launch/brand films, product or app demos, UI motion loops, kinetic typography, explainers (science, recipe, process, data), timelines, logo intros, 3D hero scenes, mascot and character animation, generative loops, shader loops, lyric/music videos and social clips (9:16, 1:1, 4:5, 16:9), with synced sound effects and music. Also use to render/QA an existing HTML animation into a video.
 ---
 
 # Motion Video
@@ -18,7 +18,7 @@ project folder `P = ./motion/<slug>/`, composition `P/<slug>.html`, duration `D`
 ## Workflow
 
 ### 1. Brief (always — decide fast, but decide)
-Fill every field of `references/brief-template.md` (deliverable, formats, one-line concept,
+Fill every field of `references/brief-template.md` (deliverable, formats, renderer, one-line concept,
 hex palette, fonts, locked copy, storyboard, motion rules, audio + hits, banned list, review
 rounds if wanted, approval gate). Adapt the closest playbook in `references/genres.md`.
 - Ask only for real assets, exact copy/numbers, the song, platform. Default the rest and say
@@ -51,18 +51,31 @@ storyboard and format list and wait for approval; otherwise continue, write the 
 the brief's `<start>` and repeat it in the final reply.
 
 ### 3. Build from a template
-`python3 $S/scaffold.py <name> --template 2d|three|gsap|glsl --formats 9x16,1x1 --duration D`
-creates `P` with the template (MOTION size, fps, duration set), `kit.js`, a `brief.md` skeleton
-(kept if one exists) and `assets/ audio/ docs/ renders/`. Or copy the template **and
-`templates/kit.js`** into `P` by hand. Then replace the demo scene.
-| Template | Use for |
-|---|---|
-| `templates/composition.html` (`2d`) | DOM/SVG/Canvas 2D: type, UI, explainers, most motion graphics. Preview player built in (Space, ←/→, F formats, G safe areas, `?t=3.2`). |
-| `templates/three-composition.html` (`three`) | Three.js. `python3 $S/vendor.py P three` first; render with `--gl`. Preview needs http: `python3 -m http.server` in `P` (ES modules don't load from `file://`). |
-| `templates/gsap-composition.html` (`gsap`) | One **paused** master timeline; `seek(t)` = `tl.seek(t, false)`. `vendor.py P gsap` first. |
-| `templates/glsl-composition.html` (`glsl`) | Fragment shader on one full-frame triangle, `uTime` from `seek(t)`, loops by phase; DOM type on top. Render with `--gl`. |
+The brief's `<renderer>` picks the template.
+`python3 $S/scaffold.py <name> --template <renderer> --formats 9x16,1x1 --duration D`
+creates `P` with the template (MOTION size, fps, duration set), `kit.js` plus the add-on kits it
+loads, a `brief.md` skeleton (kept if one exists) and `assets/ audio/ docs/ renders/`. Or copy the
+template **and `templates/kit.js`** (plus its add-on kits) into `P` by hand. Then replace the demo scene.
+| renderer | Template | Use for |
+|---|---|---|
+| `2d` | `templates/composition.html` | DOM/SVG/Canvas 2D: type, UI, explainers, most motion graphics. Preview player built in (Space, ←/→, F formats, G safe areas, `?t=3.2`). |
+| `gsap` | `templates/gsap-composition.html` | One **paused** master timeline; `seek(t)` = `tl.seek(t, false)`. `vendor.py P gsap` first. |
+| `glsl` | `templates/glsl-composition.html` | Fragment shader on one full-frame triangle, `uTime` from `seek(t)`, loops by phase; DOM type on top. Render with `--gl`. |
+| `zdog` | `templates/zdog-composition.html` + `kit-zdog.js` | Characters, mascots, icons, props in flat-round 3D. `vendor.py P zdog`; models via `catalog.py use P <ids>`. Read `references/zdog.md`. |
+| `p5` | `templates/p5-composition.html` + `kit-p5.js` | Generative loops, flow fields, glyph type. `vendor.py P p5`. Read the p5 rules in `references/gotchas.md`. |
+| `three` | `templates/three-composition.html` | Three.js. `python3 $S/vendor.py P three` first; render with `--gl`. Preview needs http: `python3 -m http.server` in `P` (ES modules don't load from `file://`). |
+| `layered` | `templates/layered-composition.html` + `kit-layers.js` | Several engines on one timeline (`K.layers`): one engine per depth plane, at most one WebGL layer. |
+| `footage` | `templates/footage-composition.html` + `kit-footage.js` | A talking clip recut with graphics (brief has `<footage>`). Read `references/footage.md`. |
+
 Kit examples: `templates/examples/kinetic-type.html` (type kit + springs), `device-demo.html`
 (a screenshot in browser and phone frames, Canvas and DOM).
+
+**3D models (zdog / layered):** search the catalog before modelling anything:
+`python3 $S/catalog.py search <words>` (or read `catalog/catalog.json`; previews are
+`catalog/<id>.png`). List the matches in the brief's `<assets>`; model something new only when
+nothing fits or the user asks for a bespoke asset, and offer a good new model for the catalog.
+Recipes per genre (flow field, noise terrain, glyph type, beat pulse, mascot explainer) are in
+`templates/recipes/` (see `references/genres.md`).
 
 **Contract** (render.py depends on it): `window.MOTION = {width,height,fps,duration,loop,hits?}`,
 `window.ready` (Promise: fonts, images, beats, clips decoded), `window.seek(t)` draws the exact
@@ -75,6 +88,9 @@ Spring presets `K.SPRING.snappy|ui|soft|camera` (pass one where `w, z` go), `K.w
 for one impact. Images `K.cover`/`K.crop` (ctx or element; focal point, zoom, radius; crop and
 scale only) and device frames `K.device` (DOM) / `K.drawDevice` (Canvas). Type `K.glyphs`,
 `K.layoutText`/`K.drawGlyphs`, `K.fitText`, `K.rise`/`K.maskRise`, `K.typed`, `K.scramble`.
+Add-ons, loaded after kit.js: `kit-zdog.js` (`K.Z`: render, camera, layers, squash, shadow,
+models, rig + clips), `kit-p5.js` (`K.sketch`, `K.loopNoise`, `K.presim`), `kit-layers.js`
+(`K.layers`, `K.proxy` for canvas-drawn text the gates must see, `K.textBox`).
 
 **Formats** (`references/formats.md`): call `K.init(MOTION)` right after defining MOTION. One
 timeline; only layout changes per format, via `K.pick({ '9x16': …, default: … })` and
@@ -154,7 +170,8 @@ if rounds ran, the last scores and verdict; otherwise offer "say *review it* for
 - Write the composition once; afterwards change it with small edits, never a full rewrite.
 - Read a reference only when needed: audio.md with sound, assets.md with assets, formats.md
   with several formats, genres.md for the brief, craft.md and gotchas.md while building,
-  style_guide.md only when the user gave a reference.
+  style_guide.md only when the user gave a reference, zdog.md only when the renderer is zdog
+  (or layered with a Zdog layer).
 - Look only at the images a step names; each image read is expensive. `render.py --quiet`.
 - Quote numbers from reports (gates, LUFS, offsets), not whole logs.
 

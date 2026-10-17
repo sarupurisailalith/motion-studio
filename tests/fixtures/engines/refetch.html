@@ -1,0 +1,24 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>refetch</title></head>
+<body style="margin:0;background:#222">
+<!-- E10.8 fixture: the first fetch of data.txt is cancelled (as p5's loadFont does), the second
+     loads. MISSING = true also fetches a file that does not exist (that one must still be reported). -->
+<script>
+const MISSING = false;
+window.MOTION = { width: 64, height: 64, fps: 10, duration: 1, loop: true };
+window.ready = (async () => {
+  const c = new AbortController();
+  const first = fetch('data.txt?v=1', { signal: c.signal, cache: 'no-store' }).catch(() => null);
+  await new Promise(r => setTimeout(r, 0));
+  c.abort();
+  await first;
+  await (await fetch('data.txt?v=1', { cache: 'no-store' })).text();
+  if (MISSING) {
+    const c2 = new AbortController();
+    const gone = fetch('gone.txt', { signal: c2.signal }).catch(() => null);
+    c2.abort(); await gone;
+  }
+})();
+window.seek = async t => { await window.ready; document.body.style.background = '#222'; };
+</script>
+</body></html>

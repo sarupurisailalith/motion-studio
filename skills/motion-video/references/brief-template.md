@@ -16,6 +16,9 @@ Fill every field before writing code. Defaults are fine; blanks are not.
                 12–15 s | lockup". Supplied assets are used as-is: never
                 redrawn, recoloured or replaced by a drawn stand-in. None
                 supplied → say so; never invent UI, logos or numbers.
+                zdog / layered: list the catalog models used ("catalog:pip |
+                character | 0–6 s | hero"); search catalog.py first, and
+                mark anything modelled new as "new: <what>".
 <footage>       Only for a footage-led piece (someone talking on camera → a new
                 edit; read references/footage.md). renderer: footage. Clip id(s)
                 from assets.json, the script or "faster-whisper", the facts
@@ -34,6 +37,16 @@ Fill every field before writing code. Defaults are fine; blanks are not.
                 product, type ≈ the 1x1 size"). Safe-area rule: text elements carry
                 data-safe data-text and stay inside K.safe.ui (9x16 reserves
                 top 12 %, bottom 22 %, right 14 % for platform UI).
+<renderer>      One of (list grows; footage etc. may be added):
+                  2d       DOM / SVG / Canvas 2D: type, UI, most motion graphics
+                  zdog     flat-round 3D: characters, mascots, icons, props,
+                           friendly explainers (references/zdog.md)
+                  p5       generative loops, flow fields, glyph-driven type
+                           (gotchas.md "p5.js")
+                  three    product realism, lighting, perspective (--gl)
+                  layered  a mix: one engine per depth plane, e.g. p5
+                           atmosphere → zdog characters → DOM type
+                Default 2d. Pick the simplest engine that carries the concept.
 <concept>       ONE line: the formal idea or central visual rule, e.g. "one
                 shape never cut", "the baseline is a trajectory", "the
                 whole film happens inside the wordmark's period".

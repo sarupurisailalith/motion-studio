@@ -28,7 +28,7 @@ The plugin's own downloads happen only when you set things up:
 |---|---|---|
 | You install the requirements | `playwright`, `numpy`, `pillow` (and optionally `librosa`, `pypdf`, `faster-whisper`) | PyPI |
 | You run `python3 -m playwright install chromium` | A Chromium build | Playwright's download host |
-| You (or the agent, for a Three.js/GSAP/Lottie piece) run `vendor.py` | Exact pinned versions of `three`, `gsap`, `lottie-web` | The npm registry |
+| You (or the agent, for a Three.js/GSAP/Lottie/Zdog/p5.js piece) run `vendor.py` | Exact pinned versions of `three`, `gsap`, `lottie-web`, `zdog` + `zfont`, `p5`, with their licence files, into that project's `vendor/` folder | The npm registry |
 | You choose to install `faster-whisper` (optional, for word timings) and run `transcribe.py` | On its first use, faster-whisper downloads the speech model weights you name (default `small`); later runs use the cached copy. Your audio is transcribed locally and never uploaded | Hugging Face (huggingface.co) |
 
 Those requests go to the services listed above under their own privacy policies. Motion Studio

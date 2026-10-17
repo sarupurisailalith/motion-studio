@@ -1,0 +1,48 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>E10.15 spike — Zdog canvas as a Three.js CanvasTexture</title>
+<style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block}</style>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
+<script src="vendor/zdog.dist.min.js"></script>
+<script src="kit.js"></script>
+<script src="kit-zdog.js"></script>
+<script src="models/pip.js"></script>
+</head>
+<body>
+<!-- A Zdog scene drawn to an offscreen canvas every seek, used as a THREE.CanvasTexture on a
+     lit, orbiting screen (render with --gl). The texture is redrawn and flagged needsUpdate
+     inside seek(t), before renderer.render, so the frame is a pure function of t. -->
+<script type="module">
+import * as THREE from 'three';
+const K = window.K, TAU = Math.PI * 2;
+window.MOTION = K.init({ width: 960, height: 540, fps: 30, duration: 4, loop: true });
+const { W, H } = K.FORMAT, D = window.MOTION.duration;
+// Zdog side: 512x512 offscreen canvas (dpr 1: a texture has its own resolution)
+const zc = document.createElement('canvas'); zc.width = zc.height = 512;
+const zctx = zc.getContext('2d');
+const scene2 = new Zdog.Anchor(), cam2 = K.Z.camera(scene2);
+const pip = K.Z.make('pip', cam2.world), rig = K.Z.rig(pip.joints);
+// Three side
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1); renderer.setSize(W, H, false); renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color('#0d0f12');
+const camera = new THREE.PerspectiveCamera(35, W / H, 0.1, 100);
+scene.add(new THREE.HemisphereLight('#ffffff', '#202020', 1.2));
+const key = new THREE.DirectionalLight('#fff4e6', 2); key.position.set(-3, 4, 5); scene.add(key);
+const tex = new THREE.CanvasTexture(zc); tex.colorSpace = THREE.SRGBColorSpace;
+const screen = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 0.12),
+  [0, 1, 2, 3].map(() => new THREE.MeshStandardMaterial({ color: '#2b2f3a' }))
+    .concat([new THREE.MeshStandardMaterial({ map: tex }), new THREE.MeshStandardMaterial({ color: '#2b2f3a' })]));
+scene.add(screen);
+function render(t) {
+  cam2.set({ yaw: TAU * t / D, pitch: 0.2 });
+  rig.pose(t, [{ clip: 'idle', period: D / 2 }, { clip: 'wave', at: 1, len: 1.5 }]);
+  K.Z.render(scene2, zctx, { zoom: 3.6, cx: 256, cy: 400, dpr: 1, background: '#F2EFE9' });
+  tex.needsUpdate = true;                                       // re-upload this seek's pixels
+  screen.rotation.y = 0.35 * Math.sin(TAU * t / D);
+  camera.position.set(0, 0.3, 5.2); camera.lookAt(0, 0, 0);
+  renderer.render(scene, camera);
+}
+window.ready = Promise.resolve();
+window.seek = async t => render(t);
+</script></body></html>

@@ -19,11 +19,14 @@ names. Pass `--quiet` to render.py. Keep script output out of replies; quote num
    `references/brief-template.md` and the closest playbook in `references/genres.md`, save
    `P/brief.md`, and ask in one batch only for what the user alone can supply (real assets,
    exact copy or numbers, the song, platform). Default the rest and state it.
-   New piece: create the folder with `python3 $S/scaffold.py <slug> --template 2d|three|gsap|glsl
+   New piece: create the folder with `python3 $S/scaffold.py <slug> --template <renderer>
    --formats F --duration D` (template, kit.js, brief skeleton; never overwrites), then fill
    `P/brief.md`. Asset paths or chat attachments → `python3 $S/ingest.py P <paths…>` first
    (`--attached` for uploads), and use the asset ids in the brief. Never invent assets or claims;
    flag domain-standard defaults (e.g. a recipe ratio) as `[[DEFAULT: confirm or replace]]`.
+   Set the brief's `<renderer>` (2d | gsap | glsl | zdog | p5 | three | layered | footage;
+   default 2d). For zdog or layered, run `python3 $S/catalog.py search <subject words>` and list
+   the matches in `<assets>` (as `catalog:<id>`) before building; model new only when nothing fits.
    **Brand check** (logo, screenshots, fonts or a brand guide supplied): `python3 $S/brand.py P`,
    show `P/docs/brand_swatch.png` (palette + two font samples) in the same batch of questions,
    apply any overrides with `brand.py P --role NAME=#hex --font display="…" --confirm`, and write
@@ -38,8 +41,11 @@ names. Pass `--quiet` to render.py. Keep script output out of replies; quote num
    from `<formats>`). If the user is present, stop and wait for approval. In unattended runs,
    continue: write the assumption into the brief's `<start>` (e.g. "unattended: storyboard not
    signed off; proceeded with 9x16,1x1") and repeat it in the final reply.
-4. **Build.** Use the scaffolded `P/<slug>.html` (or copy a template **and** `templates/kit.js`
-   into `P`); `gsap`/`three` need `python3 $S/vendor.py P gsap|three` first. If the brief has
+4. **Build.** Use the scaffolded `P/<slug>.html` (or copy the template for the brief's
+   `<renderer>` **and** `templates/kit.js` plus its add-on kits into `P`; see SKILL.md step 3).
+   gsap / three / zdog / p5 need `python3 $S/vendor.py P <lib>` first; zdog models via
+   `catalog.py use P <ids>` (read `references/zdog.md`); p5 rules are in `references/gotchas.md`;
+   three and glsl render with `--gl`. If the brief has
    `<footage>` (renderer: footage, a talking clip recut with graphics), follow
    `references/footage.md` instead: transcribe.py → cut.py suggest (show the cut list at the
    sign-off gate) → story.json + story.py → copy `templates/footage-composition.html`, `kit.js`
