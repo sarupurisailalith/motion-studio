@@ -17,6 +17,8 @@ Usage:
                                                       # safe_area ([data-safe] inside K.safe.ui),
                                                       # text_duration ([data-text] visible >= 8 frames)
   python3 render.py comp.html --workers 4             # parallel render (default: half the CPUs, max 4)
+  python3 render.py comp.html --capture screenshot    # v0.2 capture (default auto: CDP screenshots, or the
+                                                      # canvas itself when the page is one canvas; same pixels)
 
   python3 render.py comp.html --format 16x9,9x16      # one render per format -> comp_16x9.mp4, comp_9x16.mp4
                                                       # (page gets ?format=&w=&h=; formats: 16x9 9x16 1x1 4x5)
@@ -33,7 +35,7 @@ Review renders (--stills --sheet --poster --strip --phone --contact) and --check
 
 Requires: pip install playwright && python3 -m playwright install chromium ; ffmpeg on PATH.
 """
-import argparse, asyncio, hashlib, json, math, os, random, shutil, subprocess, sys, time
+import argparse, asyncio, base64, hashlib, json, math, os, random, shutil, subprocess, sys, time
 from pathlib import Path
 
 try:
@@ -76,11 +78,142 @@ def serve(directory: Path) -> str:
     return _SERVERS[directory]
 
 
+CAPTURE = "auto"   # --capture: auto (CDP + canvas fast path) | cdp | screenshot (v0.2 path)
+# auto/cdp without --gl: rAF and capture are not held to 60 Hz (seek + 2 rAFs + capture waited
+# ~3 vsyncs). Not with --gl: SwiftShader then composites far more often and costs ~25% more CPU.
+UNCAPPED = ["--disable-frame-rate-limit", "--disable-gpu-vsync"]
+CAPTURE_LABEL = {"auto": "CDP screenshots", "cdp": "CDP screenshots", "screenshot": "page.screenshot (v0.2)"}
+_CDP = {}
+
+# seek, two rAFs (layout/paint committed), fonts; then [x, y] of the viewport when a bare CDP
+# capture equals page.screenshot(animations="disabled", caret="hide"), else null
+SEEK_PLAIN_JS = """async t => {
+  await window.seek(t);
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  if (document.fonts) await document.fonts.ready;
+  if (window.frames.length || document.getAnimations().length ||
+      document.querySelector('input,textarea,[contenteditable]')) return null;
+  const w = document.createTreeWalker(document, NodeFilter.SHOW_ELEMENT);
+  for (let n = w.nextNode(); n; n = w.nextNode()) if (n.shadowRoot) return null;
+  const v = window.visualViewport;
+  return v && v.scale === 1 ? [v.pageLeft, v.pageTop] : null;
+}"""
+
+
+# E8.1 canvas fast path. CANVAS_PROBE_JS: is the picture exactly one <canvas> filling the viewport
+# at device-pixel size, with nothing else that renders? -> {kind, alpha} or {why}.
+CANVAS_PROBE_JS = """() => {
+  const cs = document.querySelectorAll('canvas');
+  if (cs.length !== 1) return { why: cs.length + ' <canvas> elements' };
+  const c = cs[0], r = c.getBoundingClientRect(), dpr = window.devicePixelRatio;
+  if (r.left || r.top || r.width !== innerWidth || r.height !== innerHeight)
+    return { why: 'the canvas does not fill the viewport' };
+  if (c.width !== Math.round(innerWidth * dpr) || c.height !== Math.round(innerHeight * dpr))
+    return { why: `canvas is ${c.width}x${c.height}, not the viewport's device pixels` };
+  if (window.frames.length) return { why: 'the page has iframes' };
+  const up = new Set();
+  for (let e = c; e; e = e.parentElement) up.add(e);
+  const inert = new Set(['SCRIPT', 'STYLE', 'LINK', 'META', 'TEMPLATE', 'NOSCRIPT', 'TITLE']);
+  for (const e of document.body.querySelectorAll('*'))
+    if (!up.has(e) && !inert.has(e.tagName)) return { why: `another element renders (<${e.tagName.toLowerCase()}>)` };
+  let ctx = null, kind = null;
+  try {
+    for (kind of ['webgl2', 'webgl', '2d']) if ((ctx = c.getContext(kind))) break;
+  } catch (e) { return { why: 'canvas context unavailable (' + e.name + ')' }; }
+  if (!ctx) return { why: 'no webgl/2d context on the canvas' };
+  const at = ctx.getContextAttributes ? ctx.getContextAttributes() : null;
+  if (!at) return { why: 'no canvas context attributes' };
+  window.__motionCanvas = { c, up: [...up], n: document.getElementsByTagName('*').length };
+  return { kind, alpha: at.alpha !== false };
+}"""
+
+# seek, then the canvas as a PNG data URL; null if the page no longer qualifies (new elements,
+# canvas resized, CSS opacity/filter/transform on it) -> screenshot. No rAF wait: seek() draws
+# the frame (the contract), WebGL without preserveDrawingBuffer is cleared once composited, and
+# a page that draws later anyway fails canvas_path's comparison with the screenshot.
+CANVAS_SNAP_JS = """async ({ t, alpha }) => {
+  await window.seek(t);
+  const m = window.__motionCanvas, c = m.c;
+  if (!c.isConnected || document.getElementsByTagName('*').length !== m.n || window.frames.length ||
+      c.width !== Math.round(innerWidth * devicePixelRatio) || c.height !== Math.round(innerHeight * devicePixelRatio) ||
+      document.getAnimations().length) return null;
+  for (const e of m.up) {
+    const s = getComputedStyle(e);
+    if (s.opacity !== '1' || s.filter !== 'none' || s.transform !== 'none' || s.visibility !== 'visible' ||
+        s.mixBlendMode !== 'normal' || s.clipPath !== 'none' || s.maskImage !== 'none' || s.backdropFilter !== 'none')
+      return null;
+  }
+  // copy to a CPU-side canvas: encoding from it is faster than c.toDataURL, and with an alpha
+  // channel every pixel must be opaque (else the page behind would show in a screenshot)
+  if (!m.o || m.o.width !== c.width || m.o.height !== c.height) {
+    m.o = new OffscreenCanvas(c.width, c.height);
+    m.x = m.o.getContext('2d', { willReadFrequently: true });
+  }
+  m.x.clearRect(0, 0, c.width, c.height);
+  m.x.drawImage(c, 0, 0);
+  if (alpha) {
+    const d = m.x.getImageData(0, 0, c.width, c.height).data;
+    for (let i = 3; i < d.length; i += 4) if (d[i] !== 255) return null;
+  }
+  const b = await m.o.convertToBlob({ type: 'image/png' });
+  return await new Promise((ok, no) => {
+    const f = new FileReader();
+    f.onload = () => ok(f.result);
+    f.onerror = () => no(f.error);
+    f.readAsDataURL(b);
+  });
+}"""
+
+
+async def canvas_snap(page, t, mode):
+    """PNG straight from the composition's canvas (no compositor pass), or None when the page
+    no longer qualifies (then the caller takes a screenshot)."""
+    url = await page.evaluate(CANVAS_SNAP_JS, {"t": t, "alpha": mode["alpha"]})
+    return base64.b64decode(url[url.index(",") + 1:]) if url else None
+
+
+def same_pixels(a: bytes, b: bytes) -> bool:
+    import io
+    import numpy as np
+    from PIL import Image
+    ia, ib = (np.asarray(Image.open(io.BytesIO(x)).convert("RGB")) for x in (a, b))
+    return ia.shape == ib.shape and np.array_equal(ia, ib)
+
+
+async def canvas_path(page, ts):
+    """E8.1: (mode, None) when the canvas fast path is safe on this page, else (None, reason).
+    Safe = the probe passes AND the canvas PNG equals the screenshot pixel for pixel at each t
+    (seeked out of order, so a canvas drawn late, in a rAF, shows up as a mismatch)."""
+    if CAPTURE != "auto":
+        return None, f"--capture {CAPTURE}"
+    await page.evaluate("t => window.seek(t)", ts[-1])   # contexts are made by now
+    p = await page.evaluate(CANVAS_PROBE_JS)
+    if "why" in p:
+        return None, p["why"]
+    for t in ts:
+        c = await canvas_snap(page, t, p)
+        if c is None or not same_pixels(c, await snap(page, t)):
+            return None, f"canvas pixels differ from the screenshot at t={t:.3f}"
+    return p, None
+
+
+async def cdp_session(page):
+    """One CDP session per page (None when it can't be opened: use page.screenshot)."""
+    if page not in _CDP:
+        try:
+            _CDP[page] = await page.context.new_cdp_session(page)
+        except Exception:
+            _CDP[page] = None
+    return _CDP[page]
+
+
 async def open_page(pw, html: Path, fmt=None, width=None, height=None, scale=1.0, gl=False):
     args = ["--hide-scrollbars", "--force-color-profile=srgb", "--disable-lcd-text",
             "--font-render-hinting=none", "--autoplay-policy=no-user-gesture-required"]
     if gl:
         args += ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"]
+    elif CAPTURE != "screenshot":
+        args += UNCAPPED
     browser = await pw.chromium.launch(args=args)
     if fmt:
         width, height = FORMATS[fmt]
@@ -111,7 +244,21 @@ async def open_page(pw, html: Path, fmt=None, width=None, height=None, scale=1.0
     return browser, page, motion, errors
 
 
-async def snap(page, t: float, clip=None) -> bytes:
+async def snap(page, t: float, clip=None, fast=True) -> bytes:
+    """PNG of the page at t. Default capture: seek and two rAFs in one round trip, then one CDP
+    Page.captureScreenshot (`fast` = optimizeForSpeed: same pixels, bigger file). Whenever
+    page.screenshot would do more (CSS animations to freeze, carets, shadow roots, iframes),
+    and with --capture screenshot, this is the v0.2 page.screenshot path, so pixels never change."""
+    if CAPTURE != "screenshot" and clip is None:
+        at = await page.evaluate(SEEK_PLAIN_JS, t)
+        cdp = await cdp_session(page) if at is not None else None
+        if cdp is not None:
+            vp = page.viewport_size
+            r = await cdp.send("Page.captureScreenshot", {
+                "format": "png", "captureBeyondViewport": False, "optimizeForSpeed": fast,
+                "clip": {"x": at[0], "y": at[1], "width": vp["width"], "height": vp["height"], "scale": 1}})
+            return base64.b64decode(r["data"])
+        return await page.screenshot(type="png", animations="disabled", caret="hide")
     await page.evaluate("t => window.seek(t)", t)
     # two rAFs so layout/paint of the seeked state is committed before capture
     await page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
@@ -293,7 +440,7 @@ async def review(page, a, M, D, fps, stem, fmt, outdir):
     if a.poster is not None:
         t = poster_time(M, D) if a.poster == "" else float(a.poster)
         out = outdir / out_name(stem, fmt, "_poster.png")
-        out.write_bytes(await snap(page, t))
+        out.write_bytes(await snap(page, t, fast=False))
         log(f"poster (t={t:.3f}) -> {out}")
     if a.strip:
         t0, t1, n, tag = parse_strip(a.strip)
@@ -327,7 +474,7 @@ async def review_stills(page, a, D, stem, fmt, outdir):
     paths = []
     for t in ts:
         p = outdir / out_name(stem, fmt, f"_t{t:07.3f}.png")
-        p.write_bytes(await snap(page, t))
+        p.write_bytes(await snap(page, t, fast=False))
         paths.append(p)
     log(f"saved {len(paths)} stills -> {outdir}")
     if a.sheet:
@@ -545,6 +692,10 @@ async def full_render(pw, a, html, fmt, M, D, fps, scale, out, errors):
         lo, hi = bounds[wi], bounds[wi + 1]
         b, pg, _, errs = await open_page(pw, html, fmt=fmt, scale=scale, gl=a.gl)
         seg = segdir / f"seg{wi:03d}.mp4"
+        mode, why = await canvas_path(pg, [a.start + (lo + hi) // 2 / fps, a.start + lo / fps])
+        if wi == 0:
+            vlog("capture: canvas fast path" if why is None else f"capture: {CAPTURE_LABEL[CAPTURE]}"
+                 + (f" (canvas fast path off: {why})" if CAPTURE == "auto" else ""))
         proc = subprocess.Popen(ffmpeg_cmd(seg, fps, sub, a.crf, None, scale_to), stdin=subprocess.PIPE)
         for n in range(lo, hi):
             base = a.start + n / fps
@@ -553,7 +704,11 @@ async def full_render(pw, a, html, fmt, M, D, fps, scale, out, errors):
                 off = 0.0 if sub == 1 else -(a.shutter / fps) * (sub - 1 - k) / (sub - 1)
                 t = base + off
                 t = (t - loopD * math.floor(t / loopD)) if loopD else max(0.0, t)
-                proc.stdin.write(await snap(pg, t))
+                png = await canvas_snap(pg, t, mode) if why is None else None
+                if png is None and why is None:
+                    why = f"the page stopped qualifying at t={t:.3f}"
+                    vlog(f"capture: worker {wi} leaves the canvas fast path ({why})")
+                proc.stdin.write(png or await snap(pg, t))
             done[0] += 1
             if done[0] % (fps * 2) == 0:
                 el = time.time() - t_start
@@ -625,7 +780,7 @@ async def render_one_format(pw, a, fmt, outdir):
     deliver = None
     if a.deliver:  # poster + contact sheet from this page before it closes
         poster = outdir / out_name(stem, fmt, "_poster.png")
-        poster.write_bytes(await snap(page, poster_time(M, D)))
+        poster.write_bytes(await snap(page, poster_time(M, D), fast=False))
         sheet = await sheet_from_times(page, [D * i / 16 for i in range(16)],
                                        outdir / out_name(stem, fmt, "_sheet.png"), tw=480, cols=4)
         deliver = {"format": fmt or "native", "poster": poster, "sheet": sheet}
@@ -694,6 +849,10 @@ def build_parser():
     ap.add_argument("--workers", type=int, default=max(1, min(4, (os.cpu_count() or 2) // 2)),
                     help="parallel headless browsers (segments are concatenated)")
     ap.add_argument("--gl", action="store_true", help="enable SwiftShader WebGL (Three.js / shaders) in headless")
+    ap.add_argument("--capture", choices=["auto", "cdp", "screenshot"], default="auto",
+                    help="frame capture: auto = CDP screenshots, plus the canvas fast path when the page is one "
+                         "opaque <canvas> (checked against a screenshot); cdp = CDP screenshots only; "
+                         "screenshot = the v0.2 path. Pixels are the same in every mode")
     ap.add_argument("--preview", action="store_true", help="quick test: first 5 s, half resolution, 30 fps")
     ap.add_argument("--stills", help="comma-separated times (s) to save as PNG")
     ap.add_argument("--sheet", action="store_true", help="save a 4x4 contact sheet of evenly spaced stills")
@@ -744,8 +903,8 @@ def parse_formats(spec):
 
 async def main():
     a = build_parser().parse_args()
-    global QUIET
-    QUIET = a.quiet
+    global QUIET, CAPTURE
+    QUIET, CAPTURE = a.quiet, a.capture
     a.formats = parse_formats(a.format)
     if a.strip:
         parse_strip(a.strip)  # fail fast on a bad spec
