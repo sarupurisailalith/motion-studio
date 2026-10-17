@@ -1,0 +1,12 @@
+<!doctype html><html><head><meta charset="utf-8"><title>perf fixture: frame index as grey</title>
+<!-- E8.3 fixture: frame n is flat grey 10 + 3n, so a decoded video shows any duplicated, missing or
+     reordered frame at a worker boundary. 3 s at 24 fps = 72 frames. -->
+<style>html,body{margin:0;background:#000}#s{position:absolute;width:160px;height:160px}</style></head>
+<body><div id="s"></div><script>
+window.MOTION = { width: 160, height: 160, fps: 24, duration: 3, loop: false };
+window.ready = Promise.resolve();
+window.seek = t => {
+  const g = 10 + 3 * Math.round(t * 24);
+  document.getElementById('s').style.background = `rgb(${g},${g},${g})`;
+};
+</script></body></html>

@@ -131,13 +131,18 @@ every FAIL, then the worst issue first; patch, don't rewrite; re-check.
 
 ### 5. Render, deliver, QA
 ```bash
-$R P/<slug>.html --format $F --deliver --subframes 3 [--gl] [--workers 4] [--scale 2]
+$R P/<slug>.html --format $F --deliver --subframes 3 [--gl] [--workers N] [--scale 2]
 python3 $S/check.py P/renders/<slug>_<fmt>.mp4 [--loop] [--max-hold 1.0] [--sync P/audio/sfx_events.json]
 ```
 - `--deliver` → `renders/<slug>_<fmt>.mp4`, `_poster.png`, `_sheet.png`, `_sheet_phone.png` per
   format and `renders/deliver.json` (ffprobe facts). Without `--format`: one native render, no suffix.
 - `--subframes N` = real motion blur (3–4 for UI, 6–8 for fast whips). `--scale 2` supersamples
   (crisper type; 4× slower). `--gl` for WebGL/Three/shaders. `--preview` = first 5 s, half res.
+- Speed: workers default to the CPU count (max 6; with `--gl`, SwiftShader is already
+  multi-threaded, so 2–4 is as fast on a busy machine). Frames are captured over CDP, and a page that is
+  one full-frame `<canvas>` is read straight from the canvas, checked against a screenshot first;
+  pixels are the same as `--capture screenshot` (the v0.2 path). A rerun with unchanged page files
+  and flags (only `--audio` changed) reuses `renders/.cache/` and takes seconds; `--no-cache` renders.
 - check.py gates: blank frames, single-frame pops, frozen stretches (no 40 px region visibly
   moves), loop seam, loudness, `sync`; with a reference, `--against
   P/docs/reference/<name>/cuts.json` flags pacing > 30 % slower or busier. Fix every FAIL; fix or

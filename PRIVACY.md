@@ -13,7 +13,7 @@ conversation content, and it never sends anything to the author or to any third 
   guide, a `brief.md`, a reference video or stills for `reference.py`) and the compositions it
   builds for you. `reference.py` analyses local files only and never downloads a reference.
 - **Writes:** only inside your project, under `motion/<slug>/` (brief, assets, composition HTML,
-  renders, reports).
+  renders and their reuse cache in `renders/.cache/`, reports).
 - It does not read Claude's memory, chat history or conversation summaries.
 
 ## Network
